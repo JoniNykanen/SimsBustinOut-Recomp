@@ -8,9 +8,11 @@
 # -Askeleet  'sekunti:TOKEN' -parit. TOKEN kirjoitetaan out\askel.txt-tiedostoon (SIMSBO_STEP, game_info.cpp StepPad:
 #            START, A, B, X, Y, BACK, UP, DOWN, LEFT, RIGHT, LSUP, LSDOWN, LSLEFT, LSRIGHT, BLACK, WHITE, LT, RT,
 #            LTHUMB, RTHUMB; NIMIxN = N painallusta) ja 2 s myohemmin tilalle NONE, jotta sama token kelpaa uudelleen.
-# -Nappaimet 'sekunti:NAPPAIMET' -parit: peli-ikkuna aktivoidaan (AppActivate) ja NAPPAIMET lahetetaan SendKeys-
-#            muodossa, esim. '16:{ENTER}' tai '30:wwww'. Testaa nappaimisto->pad-polun (input_kbm.cpp), joka
-#            vaatii ikkunalle fokuksen. Ikkuna jaa aktiiviseksi, joten ala kirjoita koneella sen aikana.
+# -Nappaimet 'sekunti:NAPPAIN[,NAPPAIN...]' -parit: peli-ikkuna nostetaan etualalle (SetForegroundWindow) ja nappainta
+#            pidetaan pohjassa 150 ms (keybd_event), koska peli lukee padin kerran per ruutu eika alle millisekunnin
+#            SendKeys-painallus ehdi rekisteroitya. Nimet: ENTER, SPACE, ESC, TAB, BACKSPACE, UP, DOWN, LEFT, RIGHT,
+#            SHIFT, CTRL tai yksi kirjain/numero (W, A, S, D, 1, 2 ...). Esim. '16:ENTER', '30:W,W,W'.
+#            Testaa nappaimisto->pad-polun (input_kbm.cpp), joka vaatii ikkunalle fokuksen; ala kirjoita koneella sen aikana.
 # -Kesto     montako sekuntia peli pidetaan kaynnissa (oletus: suurin aika + 3 s)
 # -Ymparisto ymparistomuuttujat pelille, esim. @{ SIMSBO_NO_STEP = '1' }
 #
@@ -38,6 +40,10 @@ public class PeliIkkuna {
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
   [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc cb, IntPtr l);
   [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h, IntPtr a, int x, int y, int cx, int cy, uint f);
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
+  public static void Paina(byte vk, int ms) { keybd_event(vk, 0, 0, UIntPtr.Zero); System.Threading.Thread.Sleep(ms); keybd_event(vk, 0, 2, UIntPtr.Zero); }
   public delegate bool EnumProc(IntPtr h, IntPtr l);
   [StructLayout(LayoutKind.Sequential)] public struct R { public int L, T, Rt, B; }
   public static List<IntPtr> Find(uint pid) { var r = new List<IntPtr>(); EnumWindows((h, l) => { uint p; GetWindowThreadProcessId(h, out p); if (p == pid && IsWindowVisible(h)) r.Add(h); return true; }, IntPtr.Zero); return r; }
@@ -74,14 +80,20 @@ foreach ($a in $Askeleet) {
     $tapahtumat[$t] = $osat[1].Trim().ToUpperInvariant()
     if (-not $tapahtumat.ContainsKey($t + 2)) { $tapahtumat[$t + 2] = 'NONE' }
 }
-# nappaimet: aika -> SendKeys-merkkijono
+# nappaimet: aika -> virtuaalinappainkoodit
+$vkNimet = @{ ENTER = 0x0D; SPACE = 0x20; ESC = 0x1B; TAB = 0x09; BACKSPACE = 0x08; UP = 0x26; DOWN = 0x28; LEFT = 0x25; RIGHT = 0x27; SHIFT = 0x10; CTRL = 0x11 }
+function VkKoodi($nimi) {
+    $n = $nimi.Trim().ToUpperInvariant()
+    if ($vkNimet.ContainsKey($n)) { return [byte]$vkNimet[$n] }
+    if ($n.Length -eq 1) { return [byte][char]$n }   # kirjaimet ja numerot: VK = ASCII-koodi
+    throw "tuntematon nappain '$nimi'"
+}
 $nappainTapahtumat = @{}
 foreach ($n in $Nappaimet) {
     $osat = $n -split ':', 2
-    if ($osat.Count -ne 2) { throw "nappain '$n' ei ole muotoa sekunti:NAPPAIMET" }
-    $nappainTapahtumat[[int]$osat[0]] = $osat[1]
+    if ($osat.Count -ne 2) { throw "nappain '$n' ei ole muotoa sekunti:NAPPAIN" }
+    $nappainTapahtumat[[int]$osat[0]] = @(($osat[1] -split ',') | ForEach-Object { VkKoodi $_ })
 }
-if ($Nappaimet.Count) { $shell = New-Object -ComObject WScript.Shell }
 
 $kaikkiAjat = @($Ajat) + @($tapahtumat.Keys) + @($nappainTapahtumat.Keys)
 if ($Kesto -le 0) { $Kesto = (($kaikkiAjat | Measure-Object -Maximum).Maximum) + 3 }
@@ -107,9 +119,13 @@ try {
             if ($tapahtumat[$kulunut] -ne 'NONE') { "${kulunut}s: askel $($tapahtumat[$kulunut])" }
         }
         if ($nappainTapahtumat.ContainsKey($kulunut)) {
-            $aktivoitu = $shell.AppActivate($p.Id); Start-Sleep -Milliseconds 300
-            $shell.SendKeys($nappainTapahtumat[$kulunut])
-            "${kulunut}s: nappaimet '$($nappainTapahtumat[$kulunut])' (ikkuna aktivoitu: $aktivoitu)"
+            $hs = [PeliIkkuna]::Find([uint32]$p.Id)
+            if ($hs.Count) {
+                [void][PeliIkkuna]::SetForegroundWindow($hs[0]); Start-Sleep -Milliseconds 300
+                $etuala = [PeliIkkuna]::GetForegroundWindow() -eq $hs[0]
+                foreach ($vk in $nappainTapahtumat[$kulunut]) { [PeliIkkuna]::Paina($vk, 150); Start-Sleep -Milliseconds 150 }
+                "${kulunut}s: nappaimet $(($nappainTapahtumat[$kulunut] | ForEach-Object { '0x{0:X2}' -f $_ }) -join ',') (peli etualalla: $etuala)"
+            } else { "${kulunut}s: nappaimet: ei nakyvaa ikkunaa" }
         }
         if ($kuvattavat -contains $kulunut) {
             $hs = [PeliIkkuna]::Find([uint32]$p.Id)

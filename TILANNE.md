@@ -83,7 +83,7 @@ Päivitetty 24.10.2026.
 - Selvityksen mukaan seuraavat seinät: 6 kernel-exporttia (IoCompletion-perhe, ObOpenObjectByName,
   IoQueryVolumeInformation; forkin patch applikoituu puhtaasti) ja mustan gamma-rampin suojaus (fork 57c5e46).
 
-## Session 1 lopputila (24.10. klo 16:00) — LUE TÄMÄ ENSIN UUDESSA SESSIOSSA
+## Session 1 lopputila (24.10. klo 16:00)
 - SDK:n työpuussa (ei committoitu, `git -C C:\XboxRecomp\XboxXBE-Recomp diff`) on 4 tiedoston muutos, tallennettu myös
   `sdk-muutokset-2026-10-24.patch`:
   - SuperSampleScale-malli: `runtime\xdk\d3d8.cpp` (SetMultiSampleType :218, UpdateSuperSample :227, kutsut
@@ -106,21 +106,50 @@ Päivitetty 24.10.2026.
   `refs\bustinout-recomp` (USA-peli), `refs\abilliontokens-XboxXBERecomp` (fork, haara origin/bustinout-port),
   `fork-sdk` (worktree). Kloonaa uudelleen GitHubista jos puuttuvat.)
 
-## Seuraavaksi (sessio 2) — Musta-ruutu-selvitys.md vaiheet 3–8
-1. Vaihe 4: kernel-exportit (`git -C SDK apply sims-patches\kernel-exportit.patch`), käännä, aja.
-2. Vaihe 6: gamma-suoja (`gamma-musta-ramppi-d3d12.patch` + `-C2 gamma-pending-slotit-d3d8.patch`).
-3. Vaihe 7: picture_top (`picture-top-rivit.patch` + game_info.cpp `.picture_top = 16, .picture_height = 448`).
-4. Vaihe 3: pelipuoli — `[functions] 0x66A10`, USA:n hooks.cpp osoitemuunnoksin, näppäimistö→pad (`input_kbm.cpp`).
-5. Pelattavuustesti valikosta taloon; ohjain; tallennus.
-- Sitten syöte: peli lukee vain Xbox-padia; USA-projektin
-  `src\` sisältää näppäimistö→pad-käännöksen (kGame.pad-hook).
-- Jos peli pysyy pystyssä ja piirtää: katso kuvakaappaus, testaa näppäimistö/ohjain. USA-projektin `src/` sisältää
-  näppäimistö→pad-käännöksen, kuvasuhdeasetuksen ym., jotka voi siirtää tänne (osoitteet +0xA0 / .text eri).
-- Harkitse SDK:n vaihtoa forkin `bustinout-port`-haaraan, jos upstream-runtimessa ilmenee tämän pelin
-  ongelmia (fork: introvideon 1:1-piirto, kuvasuhde, d3d12 SuperSampleScale). Upstream on kuitenkin uudempi.
-- Puuttuvat D3D/DSound-symbolit etsitään käsin: `python ..\XboxXBE-Recomp\tools\symbols\xbe2pe.py config\game.toml sims.exe`
-  → Ghidra, ja osoitteet `config\game.toml`:n `[symbols]`-osioon.
-- Kun config on täydellinen, oikeat 5558-allekirjoitukset: `xbe_symbols --sign config\game.toml --out ..\XboxXBE-Recomp\xdk\5558\signatures.toml`.
+## Sessio 2 (24.10. klo 16:00–16:35) — PELI PELATTAVA VALIKOSTA TALOON — LUE TÄMÄ ENSIN UUDESSA SESSIOSSA
+Musta-ruutu-selvitys.md:n vaiheet 0, 3, 4, 6, 7 ja 8 tehty. Kaikki käännökset 6–24 s, ei yhtään virhettä.
+- **Git-pohja (vaihe 0):** SDK:ssa haara `sims-5558` (`git -C C:\XboxRecomp\XboxXBE-Recomp log`): `3a267e8` xdk/5558,
+  `2a23ae1` SuperSampleScale + PlayEx, `be45452` kernel-exportit (IoCompletion-perhe, IoQueryVolumeInformation,
+  ObOpenObjectByName, NtSetInformationFile luokka 30) + gamma-suoja + picture_top. Työpuu puhdas; vain kokeilukansio
+  `xdk-5558-lainattu-5849-koe\` on seuraamaton (voi poistaa). Pelirepo: `5ae8933` sessio 1, `3b46b70` sessio 2.
+  `sdk-muutokset-2026-10-24.patch` on nyt historiaa (sama sisältö commitissa 2a23ae1).
+- **Pelipuoli (vaihe 3):** `src\game\hooks.cpp` = InsertCallback + frame-step-hookit `sub_00123400` (kvantisoija) ja
+  `sub_00123540` (frame tick) Europe-osoitteilla (data 0x35D2B8 / 0x30AB70 / 0x35D2D0); PAL 1,2×-ylinopeus poissa.
+  Hook kirjoittaa releaseen kerran rivin `simsbo: frame step hook live, first elapsed … -> N ticks` = todiste, että
+  DLL-mallin `X86_FUNC(sub_…)`-override toimii. Bisect: `SIMSBO_NO_STEP=1`. `[functions] 0x66A10` EI tarvittu:
+  recompi löysi funktion itse (`generated\game\x86_func_mapping.cpp` rivi 2164).
+  `src\common\input_kbm.cpp/.h` (USA:n Windows-polku ilman overlay-porttia): WASD = vasen tikku, nuolet = D-pad,
+  Space = A, Esc/Backspace = B, Enter = Start, Tab = Back, Q/E/R/F + hiiren oikea nappi/rulla = kamera, X/Y, Z/C =
+  liipaisimet, 1/2 = black/white. `src\common\game_info.cpp`: `.message = &kbm::Message`, `.pad = &PadHook`
+  (SIMSBO_STEP-askellus + SIMSBO_AUTOSTART), `.picture_top = 16, .picture_height = 448`.
+- **Ajot:** `kaappaa-peli-ikkuna.ps1` osaa nyt `-Askeleet '16:START','20:START','24:A','28:A','32:RIGHTx3','36:A','40:A'`
+  (SIMSBO_STEP-tokenit, NONE 2 s välissä, kirjoitus uudelleenyrityksellä) ja `-Nappaimet '16:ENTER'` (keybd_event
+  150 ms pito; SendKeys ei kelpaa, koska <1 ms painallus ei ehdi padin ruutukohtaiseen lukuun). Tulokset kansiossa
+  `out\kuvakaappaukset\`: `s2a-12s` intro oikean kokoinen ilman palkkeja, `s2b-23s` päävalikko (Continue/Bust Out/
+  Free Play/Credits = tallennus on olemassa), `s2b-27s` Select Save, `s2b-35s` Customize A Sim (RIGHTx3 vei
+  kursorin ✓-merkkiin), `s2b-43s` Loading, **`s2b-75s` TALO LATAUTUNUT** (klubitontti, HUD, tutoriaalidialogi
+  "Peter: Hey Pat!"). `s2d-23s`: näppäimistö-Enter ohitti intron (ikkunan pitää olla etualalla; SetForegroundWindow
+  onnistuu taustalta vasta toisella yrityksellä). 78 s ajo ilman virheriviä; ei `kernel export … not implemented`,
+  ei `indirect call … has no recompiled function`.
+- **Ei testattu tässä sessiossa:** ääni (kuuluuko; kaiku puuttuu odotetusti, E.4), tallennus pelistä (kernel-exportit
+  tulevat tässä vastaan), kamera hiirellä, kävely WASD:llä, ohjain. Nämä vaativat ihmisen koneen ääreen.
+- Tarkistustyönkulku (4 katselmointia: disassembly, recomp-output + override-mekanismi, SDK-muutokset, porttauksen
+  uskollisuus) ajettiin rinnakkain; löydökset kirjataan alle kun valmis.
+
+## Seuraavaksi (sessio 3)
+1. **Käsin pelitesti** (Joni): `out\build\release\SimsBustinOut.exe`, Enter ×2 → Continue → Sim 1 → ✓ → talo. Kuuntele
+   ääni, kävele WASD:llä, kamera hiiren oikealla napilla + rullalla, tallenna pelistä (Start-valikko). Kirjaa viat.
+2. Jos tallennus kaatuu tai lokissa on `kernel export N (…) is not implemented`: nimi `runtime\kernel\ordinals.cpp`:stä,
+   toteutus forkin `bustinout-port`-haarasta (`…\scratchpad\refs\abilliontokens-XboxXBERecomp`, jos tallella).
+3. Vaihe 2 (valinnainen): diagnostiikkabuild ilman NDEBUG:ia → `boot: kernel imports resolved, 0 missing` ja
+   `d3d12: all black gamma ramp ignored` -rivit kertovat, olivatko patchit tarpeen.
+4. Vaihe 9 (valinnainen): overlay F1/F2 (asetukset, fps) ja cheatit USA-projektista, karsinta Musta-ruutu-selvitys.md:n
+   mukaan; `settings.toml` display_mode 'borderless' pelaamiseen.
+5. Julkaisu: `release.bat` (pelikoodi käännetään pelaajan omasta XBE:stä) + SDK-haaran `sims-5558` tarjoaminen upstreamiin
+   (3 committia ovat yleiskäyttöisiä: 5558-sarja, SuperSample-malli, kernel/gamma/picture_top).
+- Puuttuvat D3D/DSound-symbolit etsitään tarvittaessa käsin: `python ..\XboxXBE-Recomp\tools\symbols\xbe2pe.py
+  config\game.toml sims.exe` → Ghidra → `config\game.toml` `[symbols]`. Kun config on täydellinen:
+  `xbe_symbols --sign config\game.toml --out ..\XboxXBE-Recomp\xdk\5558\signatures.toml`.
 
 ## Huomioita
 - SDK-selvityksen raportti (mitä 5558-tuki vaatii) tallennetaan tähän kansioon nimellä `XDK-5558-selvitys.md`.
