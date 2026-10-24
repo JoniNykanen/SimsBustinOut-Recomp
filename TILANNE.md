@@ -134,8 +134,9 @@ Musta-ruutu-selvitys.md:n vaiheet 0, 3, 4, 6, 7 ja 8 tehty. Kaikki käännökset
 - **Käännös:** `kaanna-uudelleen.bat` toimii cmd:stä (tuplaklikkaus) ja Git Bashista (`cmd //c '…\kaanna-uudelleen.bat'`),
   mutta **ei** PowerShellin `&`-operaattorilla eikä `cmd /c "…bat 2>&1"`-muodossa (PowerShell rikkoo `%VSDIR%`- ja
   `>nul`-osat: "'n' is not recognized"). Lokissa `simsbo: frame step hook live …` = hook ja DLL-linkitys ajan tasalla.
-- **Ei testattu tässä sessiossa:** ääni (kuuluuko; kaiku puuttuu odotetusti, E.4), tallennus pelistä (kernel-exportit
-  tulevat tässä vastaan), kamera hiirellä, kävely WASD:llä, ohjain. Nämä vaativat ihmisen koneen ääreen.
+- **Käsin pelitesti (Joni, 24.10. klo 16:35):** 3 min 41 s, "toimi ihan hyvin, ei ongelmia". Loki: Exit (0), ei yhtään
+  virheriviä; tallennus kirjoitettiin (`hdd\E\UDATA\45410043\0069006D1352\SaveGame` + `Config` päivittyivät) → myös
+  kernel-exportit ja tiedosto-IO toimivat. Ohjainta ei testattu (ei padia kytkettynä).
 - Tarkistustyönkulku (4 rinnakkaista katselmointia, 610 k tokenia, 15 min): **0 vikaa**, 9 huomiota → alla.
 
 ### Tarkistustyönkulun tulos (sessio 2, 4 agenttia: disassembly / recomp-output / SDK / porttaus)
@@ -167,17 +168,18 @@ Huomiot (ei toimenpiteitä, paitsi 1):
 8. `picture_top/height` 16/448 pätee vain 640×480-tilaan (720p-tila olisi 1200×660); peli käyttää vain 640×480:aa.
 9. `.missing`-teksti game_info.cpp:ssä poikkeaa USA:sta ("DATA and movies folders") — sessio 1:n sanamuoto, ei muutettu.
 
-## Seuraavaksi (sessio 3)
-1. **Käsin pelitesti** (Joni): `out\build\release\SimsBustinOut.exe`, Enter ×2 → Continue → Sim 1 → ✓ → talo. Kuuntele
-   ääni, kävele WASD:llä, kamera hiiren oikealla napilla + rullalla, tallenna pelistä (Start-valikko). Kirjaa viat.
-2. Jos tallennus kaatuu tai lokissa on `kernel export N (…) is not implemented`: nimi `runtime\kernel\ordinals.cpp`:stä,
-   toteutus forkin `bustinout-port`-haarasta (`…\scratchpad\refs\abilliontokens-XboxXBERecomp`, jos tallella).
-3. Vaihe 2 (valinnainen): diagnostiikkabuild ilman NDEBUG:ia → `boot: kernel imports resolved, 0 missing` ja
-   `d3d12: all black gamma ramp ignored` -rivit kertovat, olivatko patchit tarpeen.
-4. Vaihe 9 (valinnainen): overlay F1/F2 (asetukset, fps) ja cheatit USA-projektista, karsinta Musta-ruutu-selvitys.md:n
-   mukaan; `settings.toml` display_mode 'borderless' pelaamiseen.
-5. Julkaisu: `release.bat` (pelikoodi käännetään pelaajan omasta XBE:stä) + SDK-haaran `sims-5558` tarjoaminen upstreamiin
+## Seuraavaksi (sessio 3) — peli on pelattava, loput on viimeistelyä
+1. Pelaa pidempään ja kirjaa viat: jos lokissa on `kernel export N (…) is not implemented` tai `indirect call … has no
+   recompiled function`, nimi `runtime\kernel\ordinals.cpp`:stä / `korjaa-puuttuvat-funktiot.ps1`; toteutukset forkin
+   `bustinout-port`-haarasta (`…\scratchpad\refs\abilliontokens-XboxXBERecomp`, jos tallella, muuten GitHubista).
+2. `settings.toml`: display_mode 'borderless' tai 'fullscreen' pelaamiseen; fps_cap voi nostaa (frame-step-hook pitää
+   nopeuden oikeana millä tahansa ruudunpäivityksellä). Ohjain: SDL3 tunnistaa XInput-padit suoraan, testaamatta.
+3. Vaihe 9 (valinnainen): overlay F1/F2 (asetukset, fps) ja cheatit USA-projektista, karsinta Musta-ruutu-selvitys.md:n
+   mukaan. Vaihe 2 (valinnainen): diagnostiikkabuild ilman NDEBUG:ia näyttää `kernel imports resolved, N missing`- ja
+   gamma-rivit.
+4. Julkaisu: `release.bat` (pelikoodi käännetään pelaajan omasta XBE:stä) + SDK-haaran `sims-5558` tarjoaminen upstreamiin
    (3 committia ovat yleiskäyttöisiä: 5558-sarja, SuperSample-malli, kernel/gamma/picture_top).
+5. Seuraava peli: `uusi-peli.ps1`, ja LUE MINUT.md:n ohje (XDK-build + GitHub-forkit ensin).
 - Puuttuvat D3D/DSound-symbolit etsitään tarvittaessa käsin: `python ..\XboxXBE-Recomp\tools\symbols\xbe2pe.py
   config\game.toml sims.exe` → Ghidra → `config\game.toml` `[symbols]`. Kun config on täydellinen:
   `xbe_symbols --sign config\game.toml --out ..\XboxXBE-Recomp\xdk\5558\signatures.toml`.
