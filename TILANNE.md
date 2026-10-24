@@ -110,8 +110,8 @@ Päivitetty 24.10.2026.
 Musta-ruutu-selvitys.md:n vaiheet 0, 3, 4, 6, 7 ja 8 tehty. Kaikki käännökset 6–24 s, ei yhtään virhettä.
 - **Git-pohja (vaihe 0):** SDK:ssa haara `sims-5558` (`git -C C:\XboxRecomp\XboxXBE-Recomp log`): `3a267e8` xdk/5558,
   `2a23ae1` SuperSampleScale + PlayEx, `be45452` kernel-exportit (IoCompletion-perhe, IoQueryVolumeInformation,
-  ObOpenObjectByName, NtSetInformationFile luokka 30) + gamma-suoja + picture_top. Työpuu puhdas; vain kokeilukansio
-  `xdk-5558-lainattu-5849-koe\` on seuraamaton (voi poistaa). Pelirepo: `5ae8933` sessio 1, `3b46b70` sessio 2.
+  ObOpenObjectByName, NtSetInformationFile luokka 30) + gamma-suoja + picture_top. Työpuu puhdas (kokeilukansio
+  `xdk-5558-lainattu-5849-koe\` poistettu sessiossa 2b). Pelirepo: `5ae8933` sessio 1, `3b46b70` sessio 2.
   `sdk-muutokset-2026-10-24.patch` on nyt historiaa (sama sisältö commitissa 2a23ae1).
 - **Pelipuoli (vaihe 3):** `src\game\hooks.cpp` = InsertCallback + frame-step-hookit `sub_00123400` (kvantisoija) ja
   `sub_00123540` (frame tick) Europe-osoitteilla (data 0x35D2B8 / 0x30AB70 / 0x35D2D0); PAL 1,2×-ylinopeus poissa.
@@ -168,17 +168,53 @@ Huomiot (ei toimenpiteitä, paitsi 1):
 8. `picture_top/height` 16/448 pätee vain 640×480-tilaan (720p-tila olisi 1200×660); peli käyttää vain 640×480:aa.
 9. `.missing`-teksti game_info.cpp:ssä poikkeaa USA:sta ("DATA and movies folders") — sessio 1:n sanamuoto, ei muutettu.
 
-## Seuraavaksi (sessio 3) — peli on pelattava, loput on viimeistelyä
-1. Pelaa pidempään ja kirjaa viat: jos lokissa on `kernel export N (…) is not implemented` tai `indirect call … has no
+## Sessio 2b (24.10. klo 16:35–17:05) — viimeistely: overlay, cheatit, julkaisupaketti, upstream-haarat
+- **F1/F2-overlay portattu** USA-projektista: `src\common\overlay.cpp/.h` (ImGui 1.91, `.ui = &overlay::Draw`
+  game_info.cpp:ssä). F1 = asetukset (näyttötila, resoluutio [harmaana borderlessissä], vsync, fps-katto ml. upstreamin
+  "Monitor refresh rate" = `app::kFpsCapRefresh`, render scale 50–200 %, anisotropia, näppäinkartta, cheatit; Apply/Save),
+  F2 = fps, frame time -käyrä, host/render/aspect ja backend-laskurit. Karsittu USA:sta: aspect ratio-, ultrawide- ja
+  HDR-rivit (ei upstream-vastinetta) ja `g_perf_hle_ns`. `input_kbm.cpp` ei syötä padia, kun F1 on auki
+  (`overlay::SettingsOpen()`). F2-paneelin tausta tummennettiin (alpha 0,45 → 0,80), koska harmaat rivinimet eivät
+  näkyneet kirkkaan kohtauksen päällä; nimisarakkeeseen lisättiin väljyyttä.
+- **Cheatit portattu** (`src\game\cheats.cpp`, `src\common\cheats.h`): optiot 0x310C38 (USA 0x310B98 + 0xA0), salpa
+  0x3DD010, pad manager 0x35D490, setter `sub_000720A0` (retn 4, ecx = optiot), hook per-frame-päivitykseen
+  `sub_000122C0` (USA 0x12280 + 0x40). Koodit syötetään pelin omalla setterillä title-säikeessä vain, kun peli itse
+  tunnistaisi ne (salpa auki, pad manager ja tunnistin olemassa). Testaamatta pelin sisällä (F1-ruudut ovat harmaana,
+  kunnes talo on ladattu); mekanismi varmennettu disassemblystä (tarkistustyönkulku, 0 vikaa).
+- **Ajot:** `s2f-14s/20s` F1- ja F2-paneelit piirtyvät; `s2j-14s` borderless 2560×1440, render target **1920×1440
+  (100 %)**, 16:9 (widescreen TV), 60 fps vsyncillä, 0 late / 0 block. `settings.toml`: borderless, width/height 0
+  (= työpöytä; 960×720 arvoilla render target jäi 960×720), vsync, fps_cap 60.
+- **Julkaisupaketti:** `release.bat` ajettu → `SimsBustinOut.zip` (57 MB: exe, `compiler\` ilman work-kansiota, tyhjä
+  `assets`, README.md, THIRD_PARTY.txt, VC-runtime-DLL:t). Ei pelikoodia: ensimmäinen käynnistys kääntää sen pelaajan
+  omasta XBE:stä. Kokeilukansiot `xdk-5558-lainattu-5849-koe` (SDK) ja `compiler\xdk\5558-lainattu-5849` poistettu.
+- **README.md** kirjoitettu julkaisua varten (ominaisuudet, näppäinkartta, kääntöohje, kiitokset abilliontokensille).
+- **Upstream-tarjous valmisteltu, PR:ää EI vielä avattu:** fork `https://github.com/JoniNykanen/XboxXBERecomp`
+  (remote `joni`), haarat `sims-5558` (koko työhaara), `xdk-5558` (3f05c44: layout.toml + uudelleen generoidut
+  signatuurit 198/246, round-trip 258/258 identtinen) ja `supersample-picture-rows` (7aae77d SuperSample + PlayEx,
+  7347667 picture rows abilliontokensin tekijyydellä). Kernel-osa jätettiin pois (upstreamin PR #7 kattaa saman),
+  gamma-suoja pois (huomio 5). Upstreamin PR #8 (runtime-korjaukset) voi konfliktoida SuperSample-haaran kanssa.
+  Työpuu: `…\882f5d8e-…\scratchpad\sdk-upstream-pr` (git worktree SDK-kloonista).
+- **Graafiset parannukset USA-projektissa (3 agentin survey, `graafiset-survey.txt` scratchpadissa):** kaikki toimiviksi
+  todistetut ovat jo tässä buildissa tai upstreamissa (picture rows, SuperSampleScale, gamma-suoja, 16:9 ilman palkkeja,
+  render scale, anisotropia, fps-katto + oikea nopeus). Ainoa aidosti puuttuva ja toimivaksi mitattu: **HDR-ulostulo**
+  (fork-commit b3b8b9d, scRGB FP16 -swap chain, ~410 riviä, d3d12.cpp-osa cherry-pickautuu upstreamiin puhtaasti, vain
+  settings.cpp/README konfliktoivat; hyödyttää vain HDR-näytöllä). Pieniä, vaarattomia: UV-rajaus 2D-spriteille
+  (583d612, poistaa fonttiatlaksen saumat render scale > 100 %), ikkunan nuolikursori (583d612, 3 riviä main.cpp),
+  CopyByRegion-skaalakorjaus. **Ei kannata:** Hor+ ultrawide (rikki USA:ssakin, peruttu kahdesti), dirty-state-optimointi
+  (23 konfliktia, vain suorituskyky), Vulkan-korjaukset (ei D3D12-vastinetta tarvita). Supersample-alassuodatusta ei
+  USA:ssa tehty.
+
+## Seuraavaksi (sessio 3)
+1. **Kysy Jonilta ja avaa upstream-PR:t** forkin haaroista: PR 1 `xdk-5558` ("xdk: 5558 layout and signatures"), PR 2
+   `supersample-picture-rows` (attribuutio abilliontokensille säilyy committeina). Englanninkielinen kuvaus, maininta
+   PR #8:n mahdollisesta konfliktista.
+2. Cheatit pelin sisällä: aja talo auki (`-Askeleet` s2b-sarja) ja F1 → Give Money; lokiin pitäisi tulla
+   `cheats: entered Give Money (code 1): on`.
+3. Valinnaiset grafiikkaportit, jos Jonilla on HDR-näyttö: b3b8b9d HDR-ulostulo SDK-haaraan. Muuten UV-rajaus +
+   nuolikursori (pienet).
+4. Pelaa pidempään ja kirjaa viat: jos lokissa on `kernel export N (…) is not implemented` tai `indirect call … has no
    recompiled function`, nimi `runtime\kernel\ordinals.cpp`:stä / `korjaa-puuttuvat-funktiot.ps1`; toteutukset forkin
-   `bustinout-port`-haarasta (`…\scratchpad\refs\abilliontokens-XboxXBERecomp`, jos tallella, muuten GitHubista).
-2. `settings.toml`: display_mode 'borderless' tai 'fullscreen' pelaamiseen; fps_cap voi nostaa (frame-step-hook pitää
-   nopeuden oikeana millä tahansa ruudunpäivityksellä). Ohjain: SDL3 tunnistaa XInput-padit suoraan, testaamatta.
-3. Vaihe 9 (valinnainen): overlay F1/F2 (asetukset, fps) ja cheatit USA-projektista, karsinta Musta-ruutu-selvitys.md:n
-   mukaan. Vaihe 2 (valinnainen): diagnostiikkabuild ilman NDEBUG:ia näyttää `kernel imports resolved, N missing`- ja
-   gamma-rivit.
-4. Julkaisu: `release.bat` (pelikoodi käännetään pelaajan omasta XBE:stä) + SDK-haaran `sims-5558` tarjoaminen upstreamiin
-   (3 committia ovat yleiskäyttöisiä: 5558-sarja, SuperSample-malli, kernel/gamma/picture_top).
+   `bustinout-port`-haarasta. Ohjain: SDL3 tunnistaa XInput-padit suoraan, testaamatta.
 5. Seuraava peli: `uusi-peli.ps1`, ja LUE MINUT.md:n ohje (XDK-build + GitHub-forkit ensin).
 - Puuttuvat D3D/DSound-symbolit etsitään tarvittaessa käsin: `python ..\XboxXBE-Recomp\tools\symbols\xbe2pe.py
   config\game.toml sims.exe` → Ghidra → `config\game.toml` `[symbols]`. Kun config on täydellinen:

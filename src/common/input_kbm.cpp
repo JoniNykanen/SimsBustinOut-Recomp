@@ -37,9 +37,9 @@
 // loss, because an alt-tabbed game gets no WM_KEYUP for them. Apply() merges that snapshot into
 // the pad on whichever guest thread polls it.
 //
-// This is the Windows path of the USA project's file (abilliontokens/bustinout-recomp,
-// src/common/input_kbm.cpp) without its SDL/Linux branch and without the overlay's settings-panel
-// gate (the F1 overlay is not ported yet).
+// While the F1 settings panel is up the overlay owns the keyboard and the mouse and nothing here
+// reaches the game. This is the Windows path of the USA project's file
+// (abilliontokens/bustinout-recomp, src/common/input_kbm.cpp) without its SDL/Linux branch.
 #include "common/input_kbm.h"
 
 #include <algorithm>
@@ -53,6 +53,7 @@
 #define NOMINMAX
 #include <windows.h>
 
+#include "common/overlay.h"
 #include "core/log.h"
 
 namespace kbm {
@@ -256,7 +257,8 @@ bool Message(void* hwnd, uint32_t msg, uintptr_t wp, intptr_t lp, intptr_t* resu
 void Apply(int port, input::Pad& pad) {
     if (port != 0) return;
     pad.connected = true;  // the keyboard is the port 0 pad when no controller is plugged in
-    if (!Focused()) return;  // no focus: nothing is held
+    // no focus: nothing is held. The overlay's settings panel owns both devices while it is up
+    if (!Focused() || overlay::SettingsOpen()) return;
 
     State state;
     Collect(state);

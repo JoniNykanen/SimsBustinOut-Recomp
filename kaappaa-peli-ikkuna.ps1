@@ -81,7 +81,7 @@ foreach ($a in $Askeleet) {
     if (-not $tapahtumat.ContainsKey($t + 2)) { $tapahtumat[$t + 2] = 'NONE' }
 }
 # nappaimet: aika -> virtuaalinappainkoodit
-$vkNimet = @{ ENTER = 0x0D; SPACE = 0x20; ESC = 0x1B; TAB = 0x09; BACKSPACE = 0x08; UP = 0x26; DOWN = 0x28; LEFT = 0x25; RIGHT = 0x27; SHIFT = 0x10; CTRL = 0x11 }
+$vkNimet = @{ ENTER = 0x0D; SPACE = 0x20; ESC = 0x1B; TAB = 0x09; BACKSPACE = 0x08; UP = 0x26; DOWN = 0x28; LEFT = 0x25; RIGHT = 0x27; SHIFT = 0x10; CTRL = 0x11; F1 = 0x70; F2 = 0x71; F3 = 0x72 }
 function VkKoodi($nimi) {
     $n = $nimi.Trim().ToUpperInvariant()
     if ($vkNimet.ContainsKey($n)) { return [byte]$vkNimet[$n] }
