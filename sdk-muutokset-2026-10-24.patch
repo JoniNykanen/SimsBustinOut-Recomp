@@ -1,0 +1,185 @@
+diff --git a/runtime/gpu/d3d12.cpp b/runtime/gpu/d3d12.cpp
+index c410f12..6893d96 100644
+--- a/runtime/gpu/d3d12.cpp
++++ b/runtime/gpu/d3d12.cpp
+@@ -2016,9 +2016,11 @@ void FillFogConstants(const State& s, bool vertex_program, DrawConstants& c) {
+     c.fog[3] = float(s.rs[kRsFogTableMode]);
+ }
+ 
+-void FillSurfaceConstants(const State& s, GuestExtent size, DrawConstants& c) {
+-    c.surf[0] = float(size.w);
+-    c.surf[1] = float(size.h);
++// a vertex program's screen space positions are the render target's pixels, SuperSampleScale of them to each of the
++// frame's on a supersampled back buffer; fixed function and pretransformed positions stay in the frame's
++void FillSurfaceConstants(const State& s, GuestExtent size, bool vertex_program, DrawConstants& c) {
++    c.surf[0] = float(size.w) * (vertex_program ? s.super_x : 1.0f);
++    c.surf[1] = float(size.h) * (vertex_program ? s.super_y : 1.0f);
+     c.surf[2] = 1.0f / s.zscale;
+     Color(s.rs[kRsFogColor], c.fog_color);
+     c.misc[0] = float(SimpleState(s, kMAlphaRef) & 0xFF);
+@@ -2187,7 +2189,7 @@ void D3D12Backend::UploadConstants(const State& s, const DrawShaders& sh, const
+     Alloc vc = Upload(sizeof(s.vsc), 256);
+     std::memcpy(vc.cpu, s.vsc.data(), sizeof(s.vsc));
+     Alloc dc = Upload(sizeof(DrawConstants), 256);
+-    FillSurfaceConstants(s, size, c);
++    FillSurfaceConstants(s, size, sh.prog, c);
+     // points: host pixels per console pixel, also keeps them off the far edge pull out of screen passes
+     if (k.topo == uint32_t(Topology::Points)) c.surf[3] = TargetScale();
+     FillFogConstants(s, sh.prog, c);
+diff --git a/runtime/gpu/state.h b/runtime/gpu/state.h
+index 2a57947..aadc94d 100644
+--- a/runtime/gpu/state.h
++++ b/runtime/gpu/state.h
+@@ -185,6 +185,11 @@ struct State {
+     uint32_t light_enable = 0;                         // bit per light
+     float ss_offset_x = 0, ss_offset_y = 0;
+     float zscale = 16777215.0f;  // depth buffer units per 1.0
++    // The device's SuperSampleScale: render target pixels per pixel of the title's frame. A supersampling multisample
++    // type (D3DMULTISAMPLE_*_SUPERSAMPLE_*) renders the back buffer this many times larger and filters it down at present,
++    // so a vertex program's screen space positions are in those pixels while the title's surfaces, viewport, scissors
++    // and rects stay in the frame's. 1 for any other render target or multisample type.
++    float super_x = 1, super_y = 1;
+ };
+ 
+ }  // namespace gpu
+diff --git a/runtime/xdk/d3d8.cpp b/runtime/xdk/d3d8.cpp
+index 1d0d956..2015de0 100644
+--- a/runtime/xdk/d3d8.cpp
++++ b/runtime/xdk/d3d8.cpp
+@@ -204,16 +204,48 @@ float ZScale(const gpu::Surface& zs) {
+     return f == 0x2C || f == 0x30 ? 65535.0f : 16777215.0f;
+ }
+ 
++// D3DMULTISAMPLE_TYPE: x samples in bits 4 to 7, y in bits 0 to 3, 0x1000 a multisampling type, 0x2000 a supersampling
++// one. The library's mode setup (5558: 0x24FB40) makes the back buffer x by y times the frame and keeps that as its
++// BackBufferScale, and its render target setup (0x24AAC0) takes SuperSampleScale from it, halved by the
++// D3DRS_MULTISAMPLEMODE a multisampling type starts with: so a supersampled back buffer has x by y render target pixels
++// to each of the frame's (The Sims Bustin' Out asks for 0x2222, D3DMULTISAMPLE_4_SAMPLES_SUPERSAMPLE_GAUSSIAN, and
++// doubles its own vertex program positions to match), and NONE (0x11) keeps the frame's. Every multisampling type is
++// left at 1 here, which is the library's own value for the 2x1 and 2x2 ones; for 3x3 (0x1233) it gives 1.5, and the
++// whole BackBufferScale to a title that sets D3DRS_MULTISAMPLEMODE to 0. Neither is modelled. The frame's surfaces
++// stay the frame's size: only screen space positions are in the larger pixels.
++uint32_t g_super_x = 1, g_super_y = 1;  // the presentation's, on its back buffer
++
++void SetMultiSampleType(uint32_t type) {
++    bool super = type & 0x2000;
++    g_super_x = super ? std::max(1u, type >> 4 & 0xF) : 1;
++    g_super_y = super ? std::max(1u, type & 0xF) : 1;
++}
++
++// The render target's SuperSampleScale as the library's render target setup (5558: 0x24AAC0) keeps it: the
++// presentation's when the target is the device's back buffer, 1 on any other surface. Into the device, where the
++// library's own viewport, scissor and clear code reads it, and into g_state for the renderer.
++void UpdateSuperSample() {
++    bool back = Dev(kDevRenderTarget) == Dev(kDevBackBuffer);
++    float x = back ? float(g_super_x) : 1.0f, y = back ? float(g_super_y) : 1.0f;
++    std::memcpy(HostPtr(kDevice + kDevSuperX), &x, 4);
++    std::memcpy(HostPtr(kDevice + kDevSuperY), &y, 4);
++    g_state.super_x = x;
++    g_state.super_y = y;
++}
++
+ bool g_own_constants = false;  // D3DSCM_NORESERVEDCONSTANTS: c-38 and c-37 are the title's
+ 
+-// c-38 and c-37 hold the viewport scale and offset, as D3D_GetViewportOffsetAndScale computes them
++// c-38 and c-37 hold the viewport scale and offset, as the library's GetViewportOffsetAndScale (5558: 0x249980)
++// computes them: the viewport in render target pixels, SuperSampleScale of them to each of its own, with the screen
++// space offset added after the scale. Summed in the library's order, which with a scale of 1 is the frame's own.
+ void UpdateViewportConstants() {
+     auto& v = g_state.viewport;
+     g_state.zscale = ZScale(g_state.zs);
+-    float hw = v.w * 0.5f, hh = v.h * 0.5f;
++    float hw = v.w * 0.5f, hh = v.h * 0.5f, sx = g_state.super_x, sy = g_state.super_y;
+     if (!g_own_constants) {
+-        g_state.vsc[58] = {hw, -hh, (v.max_z - v.min_z) * g_state.zscale, 0};
+-        g_state.vsc[59] = {v.x + g_state.ss_offset_x + hw, v.y + g_state.ss_offset_y + hh, v.min_z * g_state.zscale, 0};
++        g_state.vsc[58] = {hw * sx, -hh * sy, (v.max_z - v.min_z) * g_state.zscale, 0};
++        g_state.vsc[59] = {v.x * sx + g_state.ss_offset_x + hw * sx, v.y * sy + g_state.ss_offset_y + hh * sy,
++                           v.min_z * g_state.zscale, 0};
+     }
+     // the viewport as the library's SetViewport stores it, for inlined readers
+     if (XDK_CDevice_Viewport != xdk::kUnknown) {
+@@ -247,10 +279,14 @@ void ApplyDefaultStates(X86Context& ctx) {
+ void SetFrameBuffers(const char* caller, uint32_t pp) {
+     uint32_t w = R32(pp), h = R32(pp + 4), fmt = R32(pp + 8), count = std::max<uint32_t>(R32(pp + 12), 1);
+     uint32_t auto_depth = R32(pp + 0x20), depth_fmt = R32(pp + 0x24), interval = R32(pp + 0x30);
++    uint32_t multisample = R32(pp + 0x10);
+     if (!w) w = 640;
+     if (!h) h = 480;
+-    LOGI("d3d: %s %ux%u format %X buffers %u depth %u format %X interval %X flags %X", caller, w, h, fmt, count,
+-         auto_depth, depth_fmt, interval, R32(pp + 0x28));
++    LOGI("d3d: %s %ux%u format %X buffers %u multisample %X depth %u format %X interval %X flags %X", caller, w, h, fmt,
++         count, multisample, auto_depth, depth_fmt, interval, R32(pp + 0x28));
++    SetMultiSampleType(multisample);
++    // a release log carries Report lines only: the one that says what the title's back buffer scale is
++    LOGR("d3d: %s multisample %X, SuperSampleScale %ux%u", caller, multisample, g_super_x, g_super_y);
+     uint32_t color_fmt = gpu::LinearColorFormat(fmt);
+     uint32_t zf = auto_depth ? gpu::LinearDepthFormat(depth_fmt) : 0;
+     // surfaces of the same shape are kept: a title wraps their memory in textures of its own across a Reset
+@@ -273,8 +309,6 @@ void SetFrameBuffers(const char* caller, uint32_t pp) {
+     SetDev(kDevBackBuffer, g_buffers[1]);
+     SetDev(kDevFrontBuffer, g_buffers[1]);
+     float one = 1.0f, zs = g_depth && (R32(g_depth + 12) >> 8 & 0xFF) == 0x30 ? 65535.0f : 16777215.0f;
+-    std::memcpy(HostPtr(kDevice + kDevSuperX), &one, 4);
+-    std::memcpy(HostPtr(kDevice + kDevSuperY), &one, 4);
+     std::memcpy(HostPtr(kDevice + kDevZScale), &zs, 4);
+     // fields the library's init sets that inlined library code and the default states read
+     if (XDK_CDevice_AutoDepth != xdk::kUnknown) SetDev(XDK_CDevice_AutoDepth, g_depth);
+@@ -284,6 +318,7 @@ void SetFrameBuffers(const char* caller, uint32_t pp) {
+     }
+     g_state.rt = SurfaceOf(g_buffers[1]);
+     g_state.zs = SurfaceOf(g_depth);
++    UpdateSuperSample();
+     UpdateViewportConstants();
+ }
+ 
+@@ -530,6 +565,7 @@ void ApplyRenderTarget(X86Context& ctx, uint32_t rt, uint32_t zs) {
+     Release(ctx, old_zs);
+     g_state.rt = SurfaceOf(rt);
+     g_state.zs = SurfaceOf(zs);
++    UpdateSuperSample();
+ }
+ }  // namespace
+ 
+diff --git a/runtime/xdk/dsound.cpp b/runtime/xdk/dsound.cpp
+index b322778..20db4e3 100644
+--- a/runtime/xdk/dsound.cpp
++++ b/runtime/xdk/dsound.cpp
+@@ -85,6 +85,10 @@ X86Func* Find(uint32_t guest);
+ #define SYM_IDirectSoundBuffer_SetEG FFFFFF0E
+ #define HAS_IDirectSoundBuffer_SetEG 0
+ #endif
++#ifndef SYM_IDirectSoundBuffer_PlayEx
++#define SYM_IDirectSoundBuffer_PlayEx FFFFFF0F
++#define HAS_IDirectSoundBuffer_PlayEx 0
++#endif
+ 
+ namespace {
+ 
+@@ -742,7 +746,7 @@ static void AuditExports() {
+         SYM(IDirectSoundBuffer_StopEx), SYM(IDirectSoundBuffer_Pause), SYM(IDirectSoundBuffer_SetEG),
+         SYM(XAudioDownloadEffectsImage), SYM(DirectSoundCreateBuffer), SYM(IDirectSound_CreateSoundBuffer),
+         SYM(IDirectSoundBuffer_Release), SYM(IDirectSoundBuffer_Unlock), SYM(IDirectSoundBuffer_SetBufferData),
+-        SYM(IDirectSoundBuffer_Play), SYM(IDirectSoundBuffer_Stop), SYM(IDirectSoundBuffer_SetLoopRegion),
++        SYM(IDirectSoundBuffer_Play), SYM(IDirectSoundBuffer_PlayEx), SYM(IDirectSoundBuffer_Stop), SYM(IDirectSoundBuffer_SetLoopRegion),
+         SYM(IDirectSoundBuffer_GetStatus), SYM(IDirectSoundBuffer_GetCurrentPosition), SYM(IDirectSoundBuffer_SetCurrentPosition),
+         SYM(IDirectSoundBuffer_Lock), SYM(IDirectSoundBuffer_SetVolume), SYM(IDirectSoundBuffer_SetFrequency),
+         SYM(IDirectSoundBuffer_SetFilter), SYM(IDirectSoundBuffer_SetHeadroom), SYM(IDirectSoundBuffer_SetMixBinVolumes),
+@@ -977,6 +981,17 @@ BUFFER(Play, 4) {
+     v.sync = a[3] & 4;
+     return 0;
+ }
++// (this, reference time low, reference time high, flags): Play with a scheduled start time. The Sims passes time 0
++// (play now); a future time plays now too, the scheduling offset is not reproduced. Flags share Play's low bits. Its
++// guest body forwards to the buffer's inner object, which a host buffer does not have, so the guest code faults.
++BUFFER(PlayEx, 4) {
++    v.has_gain = false;
++    v.playing = true;
++    v.looping = a[3] & 1;
++    if (a[3] & 2) v.pos = 0;
++    v.sync = a[3] & 4;
++    return 0;
++}
+ BUFFER(Stop, 1) {
+     v.playing = false;
+     return 0;
