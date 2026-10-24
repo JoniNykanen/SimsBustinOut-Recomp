@@ -131,10 +131,41 @@ Musta-ruutu-selvitys.md:n vaiheet 0, 3, 4, 6, 7 ja 8 tehty. Kaikki käännökset
   "Peter: Hey Pat!"). `s2d-23s`: näppäimistö-Enter ohitti intron (ikkunan pitää olla etualalla; SetForegroundWindow
   onnistuu taustalta vasta toisella yrityksellä). 78 s ajo ilman virheriviä; ei `kernel export … not implemented`,
   ei `indirect call … has no recompiled function`.
+- **Käännös:** `kaanna-uudelleen.bat` toimii cmd:stä (tuplaklikkaus) ja Git Bashista (`cmd //c '…\kaanna-uudelleen.bat'`),
+  mutta **ei** PowerShellin `&`-operaattorilla eikä `cmd /c "…bat 2>&1"`-muodossa (PowerShell rikkoo `%VSDIR%`- ja
+  `>nul`-osat: "'n' is not recognized"). Lokissa `simsbo: frame step hook live …` = hook ja DLL-linkitys ajan tasalla.
 - **Ei testattu tässä sessiossa:** ääni (kuuluuko; kaiku puuttuu odotetusti, E.4), tallennus pelistä (kernel-exportit
   tulevat tässä vastaan), kamera hiirellä, kävely WASD:llä, ohjain. Nämä vaativat ihmisen koneen ääreen.
-- Tarkistustyönkulku (4 katselmointia: disassembly, recomp-output + override-mekanismi, SDK-muutokset, porttauksen
-  uskollisuus) ajettiin rinnakkain; löydökset kirjataan alle kun valmis.
+- Tarkistustyönkulku (4 rinnakkaista katselmointia, 610 k tokenia, 15 min): **0 vikaa**, 9 huomiota → alla.
+
+### Tarkistustyönkulun tulos (sessio 2, 4 agenttia: disassembly / recomp-output / SDK / porttaus)
+Varmistettu tavutasolla Europe-XBE:stä (capstone): `sub_00123400` ja `sub_00123540` alkavat oikeista osoitteista, kaikki
+USA-hookin instruktiofaktat +0x110/+0xA0-siirrettyinä täsmäävät (fdiv [0x35D2B8] 0x123453/0x1234BE, fistp [0x30AB70]
+0x123476/0x1234E1, add [0x35D2D0] ×3, `ret 4` ×3, `call 0x123400` 0x1235B7, thunk 0x165F40 `jmp 0x123540`, vtable
+0x2EEDC8+0x18). Override-mekanismi: DLL:n `sub_X` on `/alternatename`-varanimi `__imp__sub_X`:lle; exe exporttaa vahvan
+`sub_X`:n ja DLL linkittyy exen import-kirjastoon → sekä DLL:n sisäinen suora kutsu että mapping-taulu osuvat hookiin.
+Hookin lisäys vaatii DLL:n uudelleenlinkityksen (cmake tekee sen itse; vanha DLL exen vieressä = hook ei näy).
+InsertCallback-argumentit (a[1] callback, a[2] context, ret 0xC) ja PlayEx (a[3] flags, ret 16) oikein. Kernel-patchin
+kaikki tunnisteet ovat upstreamissa, ordinaalit 76/191/223/227/232/243 kerran kussakin. Porttaus: hook-rungot,
+input_kbm ja StepPad/AutostartPad tavulleen USA:n mukaiset listattuja muutoksia lukuun ottamatta.
+Huomiot (ei toimenpiteitä, paitsi 1):
+1. **Tehty:** `kMaxTicks` 250 → 300: Europe-kuva on kiinteästi PAL (`[0x2E3E18]` = vakio 1 .rdata:ssa, 1/60-haara 0x123B8E
+   on kuollutta koodia), joten moottorin katto on 15 × 0,02 = 0,30 s. Vaikuttaa vain > 250 ms ruutuihin (latauspätkät).
+2. `[0x35D2B8]`:llä on kuudes lukija 0x165B03 ("CPU:"-debug-lukema, `%.2f`): näyttää ~20× suurempia lukuja hookin kanssa;
+   vain näyttöä, sama USA:ssa.
+3. `this+5`-tavu pysyy asetettuna `sub_00123540`:n häntäkutsun (`jmp [edx+8]` 0x1236C5) ajan ja getter `sub_00123500`
+   palauttaisi silloin tick-määrän (1..300) eikä 1:tä. Kutsuuko mikään sitä tickin sisällä: ei varmennettu; sama USA:ssa.
+4. `D3DDevice_SetRenderTargetFast` (0x246360): HLE laskee SuperSampleScalen uudelleen `ApplyRenderTarget`issa, kirjasto
+   ei; **ei kutsuta tässä pelissä** (yksikään recompiloitu funktio ei kutsu sub_00246360). Fidelity-korjaus tarvittaessa:
+   siirrä `UpdateSuperSample();` d3d8.cpp:568 → `D3DDevice_SetRenderTarget`iin rivin 575 jälkeen.
+5. Gamma-suoja muuttaa **kaikki** mustat rampit identiteetiksi → pelin fade-to-black SetGammaRampilla näyttäisi viimeisen
+   ruudun kirkkaana. Sama USA:ssa. Jos siirtymä näyttää oudolta käsin pelatessa, tämä on syy.
+6. Vertex-ohjelman pisteet (D3DPT_POINTLIST) ovat supersample-pikselin kokoisia = puoli ruutupikseliä; render scale < 2
+   → voi jäädä rasteroimatta. Ei tiedetä, piirtääkö peli pisteitä.
+7. `IoQueryVolumeInformation`: `VolumeOf` ei tunnista `\??\D:`-etuliitettä → purettu assets-kansio (ei ISO) raportoidaan
+   FATX-kiintolevynä, ei optisena. Jos tallennus/levyn tunnistus käyttäytyy oudosti, tämä on epäilty.
+8. `picture_top/height` 16/448 pätee vain 640×480-tilaan (720p-tila olisi 1200×660); peli käyttää vain 640×480:aa.
+9. `.missing`-teksti game_info.cpp:ssä poikkeaa USA:sta ("DATA and movies folders") — sessio 1:n sanamuoto, ei muutettu.
 
 ## Seuraavaksi (sessio 3)
 1. **Käsin pelitesti** (Joni): `out\build\release\SimsBustinOut.exe`, Enter ×2 → Continue → Sim 1 → ✓ → talo. Kuuntele

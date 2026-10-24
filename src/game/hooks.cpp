@@ -39,21 +39,24 @@ HLE_STDCALL(D3DDevice_InsertCallback, 3) {
 // Called once a frame from the frame tick sub_00123540 below (call at +0x77 of it).
 //
 // The engine measures real time and then throws the precision away: this quantiser divides the elapsed seconds by
-// the tick size at [0x35D2B8] (USA 0x35D218; 0.02 s on PAL, where [0x2E3E18] is 1, else 1/60 s), truncates to a tick
-// count stored at [0x30AB70] (USA 0x30AAD0), clamps it to 1..15 and adds it to the running total at [0x35D2D0] (USA
-// 0x35D230). The caller then makes the one delta the rest of the engine multiplies by out of ticks * tick size. A
-// frame shorter than one tick still advances the world by a whole tick: at 60 fps a PAL image runs 1.2x too fast,
-// and uncapped the speed grows without bound.
+// the tick size at [0x35D2B8] (USA 0x35D218), truncates to a tick count stored at [0x30AB70] (USA 0x30AAD0), clamps
+// it to 1..15 and adds it to the running total at [0x35D2D0] (USA 0x35D230). The tick size is set once by the frame
+// object's constructor sub_00123B10: 0.02 s when [0x2E3E18] is 1, else 1/60 s; in this Europe image [0x2E3E18] is
+// the constant 1 in .rdata, so the shipped game always runs the PAL 0.02 s quantum. The caller then makes the one
+// delta the rest of the engine multiplies by out of ticks * tick size. A frame shorter than one tick still advances
+// the world by a whole tick: at 60 fps this image runs 1.2x too fast, and uncapped the speed grows without bound.
 //
 // The fix keeps the engine's measurement and replaces only the quantiser: ticks of 1 ms, the engine's own
-// maximum-step ceiling kept (15 ticks of 1/60 s = 0.25 s), and a seconds-per-tick of dt / ticks written back into
-// [0x35D2B8], so the caller's `ticks * [0x35D2B8]` is exactly the time that really passed. The full derivation, with
-// every instruction address in the USA image, is in the USA project's docs/frame-rate.md and src/game/hooks.cpp.
+// maximum-step ceiling kept (15 ticks of 0.02 s = 0.30 s on this PAL image; the USA port's 0.25 s was its 15 x 1/60),
+// and a seconds-per-tick of dt / ticks written back into [0x35D2B8], so the caller's `ticks * [0x35D2B8]` is exactly
+// the time that really passed. The full derivation, with every instruction address in the USA image, is in the USA
+// project's docs/frame-rate.md and src/game/hooks.cpp. The one other reader of [0x35D2B8] outside the frame step is
+// the "CPU:" debug readout at 0x165B03, display only.
 X86_EXTERN_FUNC(__imp__sub_00123400);
 X86_FUNC(sub_00123400) {
     if (HookOff("SIMSBO_NO_STEP")) { __imp__sub_00123400(ctx, base); return; }
-    constexpr double kTick = 0.001;  // seconds per tick, 1/60 (NTSC) or 0.02 (PAL) before this
-    constexpr int kMaxTicks = 250;   // 0.25 s, the engine's own ceiling of 15 ticks of 1/60 s
+    constexpr double kTick = 0.001;  // seconds per tick, 0.02 (PAL) before this
+    constexpr int kMaxTicks = 300;   // 0.30 s, the engine's own ceiling of 15 ticks of 0.02 s
     const float elapsed = X86_MEMF32(ctx.esp + 0x4u);
     // not (elapsed > 0): a NaN or a negative reading takes the smallest step, as the clamp did
     const double dt = elapsed > 0.0f ? std::min(double(elapsed), kMaxTicks * kTick) : kTick;
