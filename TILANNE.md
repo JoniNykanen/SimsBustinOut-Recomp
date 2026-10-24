@@ -207,6 +207,19 @@ Huomiot (ei toimenpiteitä, paitsi 1):
   (23 konfliktia, vain suorituskyky), Vulkan-korjaukset (ei D3D12-vastinetta tarvita). Supersample-alassuodatusta ei
   USA:ssa tehty.
 
+## Sessio 2c (24.10. klo 17:20–17:30) — kaveripaketti pelitiedostoineen
+- **`SimsBustinOut-PC-pelitiedostoineen.zip`** (1,7 Gt, 85 tiedostoa, projektikansiossa, gitignoroitu) = `SimsBustinOut.zip`:n
+  sisältö + `assets\` (59 tiedostoa, 2,0 Gt) + valmis `SimsBustinOut.dll` + testattu `settings.toml`, kaikki yläkansiossa
+  `SimsBustinOut\`. Ei `compiler\work`-kansiota, ei `hdd\`-tallennuksia, lokeja eikä pdb:tä.
+- **Valmis DLL ilman uudelleenkääntöä:** runtime (`game_code.cpp` `Current()`) pitää leimaamatonta DLL:ää ajantasaisena,
+  kun se on exeä uudempi; exe ja DLL olivat 79 ms päässä toisistaan ja zipin DOS-aikaleima on 2 s tarkkuudella, joten DLL:n
+  aikaleima nostettiin pakettiin 60 s exeä uudemmaksi (17:07:16 vs 17:06:16). Jos purkuohjelma ei säilytä aikaleimoja,
+  runtime kääntää koodin itse `compiler\`-kansiosta (varapolku, ~2 min, 1 Gt levyä).
+- **Testattu:** `7z t` ok; puhdas purku scratchpadiin + 40 s ajo: loki ilman `Game code: building`-riviä (ei käännöstä),
+  `default.xbe` löytyi, D3D12-laite + `frame step hook live`, ei yhtään virheriviä. Exe tarvitsee vain Windowsin omia DLL:iä
+  (d3d12, dxgi, D3DCOMPILER_47, UCRT) + mukana olevat msvcp140/vcruntime140(_1); SDL staattinen (llvm-objdump tarkistettu).
+- Paketti tehtiin käsin staging-kansiolla; `release.bat kaverille` -tila ja SDK:n hash-leima kirjattu `system_upgrades.md`:hen.
+
 ## Seuraavaksi (sessio 3)
 1. **Seuraa upstream-PR:iä #15 ja #16** (`gh pr view 15 --repo TGP482/XboxXBERecomp`): vastaa katselmointiin, rebase
    #16, jos #8 menee ensin sisään. Kun PR:t on yhdistetty, README.md:n kääntöohje voi osoittaa suoraan upstreamiin.
