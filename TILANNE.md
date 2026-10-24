@@ -188,12 +188,15 @@ Huomiot (ei toimenpiteitä, paitsi 1):
   `assets`, README.md, THIRD_PARTY.txt, VC-runtime-DLL:t). Ei pelikoodia: ensimmäinen käynnistys kääntää sen pelaajan
   omasta XBE:stä. Kokeilukansiot `xdk-5558-lainattu-5849-koe` (SDK) ja `compiler\xdk\5558-lainattu-5849` poistettu.
 - **README.md** kirjoitettu julkaisua varten (ominaisuudet, näppäinkartta, kääntöohje, kiitokset abilliontokensille).
-- **Upstream-tarjous valmisteltu, PR:ää EI vielä avattu:** fork `https://github.com/JoniNykanen/XboxXBERecomp`
-  (remote `joni`), haarat `sims-5558` (koko työhaara), `xdk-5558` (3f05c44: layout.toml + uudelleen generoidut
-  signatuurit 198/246, round-trip 258/258 identtinen) ja `supersample-picture-rows` (7aae77d SuperSample + PlayEx,
-  7347667 picture rows abilliontokensin tekijyydellä). Kernel-osa jätettiin pois (upstreamin PR #7 kattaa saman),
-  gamma-suoja pois (huomio 5). Upstreamin PR #8 (runtime-korjaukset) voi konfliktoida SuperSample-haaran kanssa.
-  Työpuu: `…\882f5d8e-…\scratchpad\sdk-upstream-pr` (git worktree SDK-kloonista).
+- **Upstream-PR:t avattu (Jonin lupa klo 17:10):** fork `https://github.com/JoniNykanen/XboxXBERecomp` (remote `joni`),
+  haarat `sims-5558` (koko työhaara), `xdk-5558` (3f05c44: layout.toml + uudelleen generoidut signatuurit 198/246,
+  round-trip 258/258 identtinen) → **PR #15** `https://github.com/TGP482/XboxXBERecomp/pull/15`, ja
+  `supersample-picture-rows` (7aae77d SuperSample + PlayEx, 7347667 picture rows abilliontokensin tekijyydellä) →
+  **PR #16** `https://github.com/TGP482/XboxXBERecomp/pull/16`. Kernel-osa jätettiin pois (upstreamin PR #7 kattaa
+  saman), gamma-suoja pois (huomio 5). PR #8 (runtime-korjaukset) voi konfliktoida #16:n kanssa; luvattu rebase, jos #8
+  menee ensin sisään. Tarkistettu ennen avaamista: haaroissa vain SDK-koodia ja XDK-taulukoita, ei pelitiedostoja;
+  pelirepo seuraa vain src/config/docs-tiedostoja (.gitignore: assets, out, generated, hdd, *.zip).
+  Työpuu: `…\882f5d8e-…\scratchpad\sdk-upstream-pr` (git worktree SDK-kloonista), PR-tekstit `pr-body-*.md` siellä.
 - **Graafiset parannukset USA-projektissa (3 agentin survey, `graafiset-survey.txt` scratchpadissa):** kaikki toimiviksi
   todistetut ovat jo tässä buildissa tai upstreamissa (picture rows, SuperSampleScale, gamma-suoja, 16:9 ilman palkkeja,
   render scale, anisotropia, fps-katto + oikea nopeus). Ainoa aidosti puuttuva ja toimivaksi mitattu: **HDR-ulostulo**
@@ -205,9 +208,8 @@ Huomiot (ei toimenpiteitä, paitsi 1):
   USA:ssa tehty.
 
 ## Seuraavaksi (sessio 3)
-1. **Kysy Jonilta ja avaa upstream-PR:t** forkin haaroista: PR 1 `xdk-5558` ("xdk: 5558 layout and signatures"), PR 2
-   `supersample-picture-rows` (attribuutio abilliontokensille säilyy committeina). Englanninkielinen kuvaus, maininta
-   PR #8:n mahdollisesta konfliktista.
+1. **Seuraa upstream-PR:iä #15 ja #16** (`gh pr view 15 --repo TGP482/XboxXBERecomp`): vastaa katselmointiin, rebase
+   #16, jos #8 menee ensin sisään. Kun PR:t on yhdistetty, README.md:n kääntöohje voi osoittaa suoraan upstreamiin.
 2. Cheatit pelin sisällä: aja talo auki (`-Askeleet` s2b-sarja) ja F1 → Give Money; lokiin pitäisi tulla
    `cheats: entered Give Money (code 1): on`.
 3. Valinnaiset grafiikkaportit, jos Jonilla on HDR-näyttö: b3b8b9d HDR-ulostulo SDK-haaraan. Muuten UV-rajaus +
