@@ -220,7 +220,41 @@ Huomiot (ei toimenpiteitä, paitsi 1):
   (d3d12, dxgi, D3DCOMPILER_47, UCRT) + mukana olevat msvcp140/vcruntime140(_1); SDL staattinen (llvm-objdump tarkistettu).
 - Paketti tehtiin käsin staging-kansiolla; `release.bat kaverille` -tila ja SDK:n hash-leima kirjattu `system_upgrades.md`:hen.
 
+## Sessio 3 (24.10. klo 18:00–20:10) — pelirepo julkaistu, parannuskartoitus
+- **Pelirepo julkinen:** `https://github.com/JoniNykanen/SimsBustinOut-Recomp` (haara `main`, remote `origin`, 23 tiedostoa, ei
+  pelidataa). Ei vielä LICENSE-tiedostoa. SDK-fork `https://github.com/JoniNykanen/XboxXBERecomp` (sims-5558).
+- **Parannuskartoitus** (workflow, 9 lukijaa + 2 tarkastajaa/ehdotus, pysäytetty kesken): 89 ehdotusta, 61 läpäisi, 9 hylätty,
+  19 tarkistamatta. Koko taulukko: `Parannuskartoitus-2026-10-24.md` (ei committoitu). Tärkeimmät:
+  1. **Upstreamissa on vahingossa avattu PR #17 "Sims 5558"** (koko sims-5558-haara, tyhjä kuvaus, avattu 17:45): tuplaa #15+#16
+     ja tuo kernel-commitin be45452, joka piti jättää pois. Sulje: `gh pr close 17 --repo TGP482/XboxXBERecomp --comment "…"`,
+     ÄLÄ poista haaraa. Lisäksi: väite "PR #7 kattaa be45452:n" on väärä — #7 kattaa vain ordinaalit 76 ja 232 (ja määrittelee ne
+     eri tiedostoissa → linkkivirhe rebasessa); iocp 191/223/227, ObOpenObjectByName 243 ja class 30 ovat vain meillä.
+  2. **`XInputGetCapabilities = 0x2DAD67` puuttuu `config\game.toml` [symbols]-taulusta** (.XTLID 0x1003B): pelin tärinäkysely
+     sub_00126560 ajaa recompiloitua XPP-koodia HLE-kahvan päällä ja lukee caps-tavut pinoroskasta. Yksi rivi + käännös.
+  3. **Release-loki pudottaa kaikki LOGI/LOGW-rivit** (NDEBUG → kVerbose=false): `cheats: entered …` (cheats.cpp:105/114),
+     `simsbo step: holding` (game_info.cpp:46) ja `LOG_FIRST` eivät voi näkyä → vaihda LOGR. Aja kerran verbose-build
+     (Musta-ruutu-selvitys Vaihe 2: -O2 ilman NDEBUG) ja lue dsoundin "exports running their original code" -rivi.
+  4. **Lisenssi:** 7/8 src-tiedostoa on 70–100 % rivi-identtisiä abilliontokensin USA-portin kanssa, jolla ei ole lisenssiä.
+     Avaa issue (pyydä MIT/lupa, kerro että Europe toimii natiivisti Windowsilla heidän SDK-työllään), lisää oma MIT LICENSE.
+  5. **Kieli:** Europe-levy on monikielinen (FR/DE/IT/ES/NL quickdat.arc, ea_games_*.xmv), runtime vastaa XC_LANGUAGE=1 aina.
+     Nollakoodinen testi: `assets\system.cnf` `localization_test = 3` (FR). Toteutus: settings.toml `language` → xboxkrnl.cpp
+     case 7, tai pelipuolen hook sub_001001F3. Pelissä on myös oma kielivalintaruutu (optiotavu 0x310D9C = 0xFF).
+  - Pieniä varmoja: PR #15:n layout.toml-otsake väittää USA-kuvaa (korjaa ennen katselmointia) + [xtlid]-taulu 37 verkko-id:lle;
+    sims-5558 kantaa yhä forkin 194/242-sarjaa → `git checkout xdk-5558 -- xdk/5558/signatures.toml`; SDK:n `abt`-remote
+    osoittaa Temp-kansioon → `git remote set-url abt https://github.com/abilliontokens/XboxXBERecomp.git`; CMakeLists.txt:n
+    FetchContent-varapolku hakee upstream mainin (ei 5558:aa) → `JoniNykanen/XboxXBERecomp` tag be45452; README: oletukset
+    (aniso 0), "pura kirjoitettavaan kansioon", ohjainnapit Black=RB/White=LB/L,R=liipaisimet; `git rm sdk-muutokset-*.patch`.
+  - Huomiot 4, 5 ja 7 eivät koske tätä peliä (SetGammaRamp 0 kutsujaa; IoQueryVolumeInformation tavoittamaton). Seitsemän
+    crt_*-nollaa ovat lopullisia (EU-kuvassa ei runkoja, x87 inline) → Vaihe 5:n Ghidra-haku turha. Intro 43,4 s vs ffprobe
+    44,9 s → XMV tahdistuu ääneen, ok. PR #4/#5/#6 ei tarvita (Reset-rivit ovat pelin omia Reset-kutsuja).
+  - Upstream-seuranta: PR #8 korvaa #16:n SuperSampleScale-mallin omallaan (varma konflikti) ja sen AddKeyboard syöttää
+    näppäimistön porttiin 0 ennen PadHookia (W/S=liipaisimet, Q/E=white/black → vahinkocheatit) → tarvitaan guard; PR #9 tuo
+    saman PlayEx-hunkin (kommentoi #16:een); PR #3 muuttaa XMV-soittimen FlushEx-sulkupolkua → testaa video→video ennen mergeä.
+  - Hylätty: StepPad SDK:hon (upstreamissa on jo `harness/pad_script.cpp`, SCRIPT-ympäristömuuttuja), PersistDisplay-korjaus
+    (peli ei kutsu), SetFilter/SetI3DL2Source (peli ei kutsu, thunk luettiin väärin), XMV-vblank (kuollutta koodia).
+
 ## Seuraavaksi (sessio 3)
+0. **Sulje PR #17** (ks. yllä) ja tee kohdat 2–3 (XInputGetCapabilities-rivi, LOGI→LOGR) samalla käännöksellä.
 1. **Seuraa upstream-PR:iä #15 ja #16** (`gh pr view 15 --repo TGP482/XboxXBERecomp`): vastaa katselmointiin, rebase
    #16, jos #8 menee ensin sisään. Kun PR:t on yhdistetty, README.md:n kääntöohje voi osoittaa suoraan upstreamiin.
 2. Cheatit pelin sisällä: aja talo auki (`-Askeleet` s2b-sarja) ja F1 → Give Money; lokiin pitäisi tulla
