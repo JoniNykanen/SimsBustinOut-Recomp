@@ -5,7 +5,7 @@
 // setting, nothing is saved, and nothing happens until the player clicks.
 namespace cheats {
 
-// Rows of the game's cheat-code table (Europe sub_000720A0 writes it into the options object at
+// Rows of the game's cheat-code table (Europe sub_00072130 writes it into the options object at
 // 0x310C38). Entering row n toggles bit n of the game's cheat mask at options+0x76, which the cheat
 // gnome reads as SimAntics globals 46 and 47. The Xbox button sequence of each row is beside it;
 // the button names are the game's own pad layout.

@@ -244,6 +244,7 @@ WSAStartup                                           = 0
 XAudioDownloadEffectsImage                           = 0x28E2DD
 XInitDevices                                         = 0x2DA253
 XInputClose                                          = 0x2DAD5B
+XInputGetCapabilities                                = 0x2DAD67  # .XTLID 0x1003B, XPP; the 5558 set does not name it
 XInputGetState                                       = 0x2DAF3F
 XInputOpen                                           = 0x2DAD05
 XInputSetState                                       = 0x2DAFB2

@@ -2,7 +2,7 @@
 
 An unofficial native PC port of the original Xbox version of The Sims Bustin' Out (Europe / PAL release, title 45410043), statically recompiled to Windows and Direct3D 12.
 
-This port was created using the [Xbox XBE Recomp](https://github.com/TGP482/XboxXBE-Recomp) tool and follows the USA port [abilliontokens/bustinout-recomp](https://github.com/abilliontokens/bustinout-recomp), whose game hooks, keyboard layer, overlay, cheats and SDK fixes it carries over.
+This port was created using the [Xbox XBE Recomp](https://github.com/TGP482/XboxXBERecomp) tool and follows the USA port [abilliontokens/bustinout-recomp](https://github.com/abilliontokens/bustinout-recomp), whose game hooks, keyboard layer, overlay, cheats and SDK fixes it carries over.
 
 > [!NOTE]
 > This project does not include any game assets. You must provide the files from your own legally acquired copy of the game to install or build.
@@ -12,6 +12,8 @@ This port was created using the [Xbox XBE Recomp](https://github.com/TGP482/Xbox
 - Put your game files in the `assets` folder. This can be the disc image (`.iso`), or the extracted data files with `default.xbe` and the game's folders beside it.
 - Run `SimsBustinOut.exe`. The first start compiles the game's code for your PC, this only happens once.
 - Settings can be adjusted in `settings.toml` beside the exe, or in the game with F1.
+- Extract the package to a folder you can write to (not `Program Files`): the compiled game code, `settings.toml` and the saves are written beside the exe.
+- Without a `settings.toml` the game starts borderless at the desktop resolution, 60 fps with vsync, render scale 100 % and anisotropic filtering off. `settings.toml` is written when you press Save in F1.
 
 ## Features
 
@@ -33,7 +35,14 @@ This port was created using the [Xbox XBE Recomp](https://github.com/TGP482/Xbox
 - **Cheats** - the game's own pad codes (cheat gnome, give money, fill motives, unlock all objects / locations / socials / skins, team picture), entered from the F1 panel exactly as the pad sequence would enter them. Nothing is saved.
 
 ### Controller
-Supports Xbox, PlayStation and Switch controllers, with hot plugging and rumble.
+Supports Xbox, PlayStation and Switch controllers, with hot plugging and rumble. The console's buttons map as follows (the cheat codes use the console names):
+
+| Console button | Xbox One / Series | PlayStation | Switch Pro |
+|---|---|---|---|
+| Black | RB | R1 | R |
+| White | LB | L1 | L |
+| L / R | LT / RT | L2 / R2 | ZL / ZR |
+| A B X Y | by position, Xbox layout | | |
 
 ### Keyboard and mouse
 The keyboard and the mouse are a controller on port 0, and merge with a real controller on that port.
@@ -67,7 +76,13 @@ The keyboard and the mouse are a controller on port 0, and merge with a real con
 ## Building
 
 ### 1. Clone the Repository and the SDK
-Clone this repository using [Git](https://git-scm.com/). The game is built with XDK 5558, which the upstream SDK does not know yet: clone the SDK branch that does beside this repository, so that `..\XboxXBE-Recomp\cmake\XbeRecomp.cmake` exists:
+Clone this repository using [Git](https://git-scm.com/):
+
+```
+git clone https://github.com/JoniNykanen/SimsBustinOut-Recomp
+```
+
+The game is built with XDK 5558, which the upstream SDK does not know yet: clone the SDK branch that does beside this repository, so that `..\XboxXBE-Recomp\cmake\XbeRecomp.cmake` exists:
 
 ```
 git clone -b sims-5558 https://github.com/JoniNykanen/XboxXBERecomp ..\XboxXBE-Recomp
@@ -82,9 +97,13 @@ Install Visual Studio 2022 with **Desktop development with C++**, **C++ Clang to
 ### 4. Build the Project
 Run `build.bat`. The first build recompiles the game and takes a while. The exe is written to `out\build\release`. `kaanna-uudelleen.bat` rebuilds after a change (run it from a command prompt, not from PowerShell).
 
+## License
+
+MIT, see [LICENSE](LICENSE). Most of `src` (the game hooks, cheats, keyboard-and-mouse layer, overlay and scripted test pad) is carried over from [abilliontokens/bustinout-recomp](https://github.com/abilliontokens/bustinout-recomp) with Europe addresses; that work remains theirs, and permission to license it has been asked for in that repository.
+
 ## Credits
 
-- [Xbox XBE Recomp](https://github.com/TGP482/XboxXBE-Recomp), the recompiler and runtime this is built on.
+- [Xbox XBE Recomp](https://github.com/TGP482/XboxXBERecomp), the recompiler and runtime this is built on.
 - [abilliontokens/bustinout-recomp](https://github.com/abilliontokens/bustinout-recomp) and the `bustinout-port` branch of [abilliontokens/XboxXBERecomp](https://github.com/abilliontokens/XboxXBERecomp): the USA port whose analysis of the game (frame step, cheats, picture rect, SuperSampleScale), keyboard-and-mouse layer, overlay and XDK 5558 layout this port follows.
 - [XenonRecomp](https://github.com/hedge-dev/XenonRecomp) for the overridable function layout and instruction hooks.
 - [Zydis](https://github.com/zyantific/zydis) for decoding x86 instructions, [toml++](https://github.com/marzer/tomlplusplus) for the configs, [Dear ImGui](https://github.com/ocornut/imgui) for the settings overlay and [SDL](https://github.com/libsdl-org/SDL) for the window, input and controllers.

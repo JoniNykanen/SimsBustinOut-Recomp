@@ -15,7 +15,8 @@ elseif(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/../XboxXBE-Recomp/cmake/XbeRecomp.cmak
     set(SDK ${CMAKE_CURRENT_SOURCE_DIR}/../XboxXBE-Recomp)
 else()
     include(FetchContent)
-    FetchContent_Declare(xbe_sdk GIT_REPOSITORY https://github.com/TGP482/XboxXBE-Recomp.git GIT_TAG main)
+    # upstream main does not know XDK 5558 yet (TGP482/XboxXBERecomp PR #15 / #16): the branch that does
+    FetchContent_Declare(xbe_sdk GIT_REPOSITORY https://github.com/JoniNykanen/XboxXBERecomp.git GIT_TAG sims-5558)
     FetchContent_MakeAvailable(xbe_sdk)
     set(SDK ${xbe_sdk_SOURCE_DIR})
 endif()

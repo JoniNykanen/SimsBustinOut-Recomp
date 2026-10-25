@@ -309,7 +309,7 @@ void Apply(int port, input::Pad& pad) {
     const bool active = buttons != 0 || lx != 0.0f || ly != 0.0f || rx != 0.0f || ry != 0.0f ||
                         std::any_of(std::begin(analog), std::end(analog), [](uint8_t b) { return b != 0; });
     if (active && !logged.exchange(true))
-        LOGI("input: keyboard and mouse on port 0 (WASD walk, arrows D-pad, right drag and wheel camera)");
+        LOGR("input: keyboard and mouse on port 0 (WASD walk, arrows D-pad, right drag and wheel camera)");
 }
 
 }  // namespace kbm

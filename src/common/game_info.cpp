@@ -43,7 +43,7 @@ bool StepPad(int port, input::Pad& pad) {
         if (token != held) {
             held = token;
             held_since = now;
-            LOGI("simsbo step: holding '%s' (port 0)", held.c_str());
+            LOGR("simsbo step: holding '%s' (port 0)", held.c_str());
         }
     }
     if (held.empty() || held == "NONE") return true;
@@ -105,7 +105,7 @@ void AutostartPad(int port, input::Pad& pad) {
     const int64_t now = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
     int64_t expected = 0;
     if (first_ms.compare_exchange_strong(expected, now)) {
-        LOGI("simsbo autostart: enabled, first poll on port 0; scripted Start/A cycle from ~2 s");
+        LOGR("simsbo autostart: enabled, first poll on port 0; scripted Start/A cycle from ~2 s");
         return;
     }
     const int64_t elapsed = now - first_ms.load(std::memory_order_relaxed);
@@ -117,23 +117,23 @@ void AutostartPad(int port, input::Pad& pad) {
         pad.connected = true;
         pad.buttons = uint16_t(pad.buttons | 0x0010);  // Xbox Start
         if (!start_down.exchange(true))
-            LOGI("simsbo autostart: synthetic Start pressed (port 0, wButtons=0x%04X)", pad.buttons);
+            LOGR("simsbo autostart: synthetic Start pressed (port 0, wButtons=0x%04X)", pad.buttons);
     } else if (start_down.exchange(false)) {
-        LOGI("simsbo autostart: synthetic Start released (port 0)");
+        LOGR("simsbo autostart: synthetic Start released (port 0)");
     }
     if (up) {
         pad.connected = true;
         pad.buttons = uint16_t(pad.buttons | 0x0001);  // Xbox D-pad Up
-        if (!up_down.exchange(true)) LOGI("simsbo autostart: synthetic DPadUp pressed (port 0, wButtons=0x%04X)", pad.buttons);
+        if (!up_down.exchange(true)) LOGR("simsbo autostart: synthetic DPadUp pressed (port 0, wButtons=0x%04X)", pad.buttons);
     } else if (up_down.exchange(false)) {
-        LOGI("simsbo autostart: synthetic DPadUp released (port 0)");
+        LOGR("simsbo autostart: synthetic DPadUp released (port 0)");
     }
     if (a) {
         pad.connected = true;
         if (pad.analog[0] < 0xFF) pad.analog[0] = 0xFF;  // Xbox A, pressure byte
-        if (!a_down.exchange(true)) LOGI("simsbo autostart: synthetic A pressed (port 0, analog[0]=0xFF)");
+        if (!a_down.exchange(true)) LOGR("simsbo autostart: synthetic A pressed (port 0, analog[0]=0xFF)");
     } else if (a_down.exchange(false)) {
-        LOGI("simsbo autostart: synthetic A released (port 0)");
+        LOGR("simsbo autostart: synthetic A released (port 0)");
     }
 }
 

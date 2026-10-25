@@ -6,8 +6,8 @@
 // recogniser sub_00011F60 (USA 0x11F20) whenever a pad reports a fresh press, under three conditions it checks first:
 // the cheat latch byte at 0x3DD010 clear (cmp at 0x1230B), the pad manager present ([0x35D490] != 0, 0x1231E) and
 // the recogniser object present ([app+0x1E4] != 0, 0x123B2). The recogniser keeps the last six single-button presses
-// and matches them against an eight-row table the options constructor sub_000720A0 builds in code into the options
-// object at 0x310C38 (mov ecx, 0x310C38 at 0x11EC5 / 0x11F27 / 0x12088). On a match it calls the setter with the row.
+// and matches them against an eight-row table the table builder sub_00072130 (USA sub_000720A0 + 0x90, called at
+// 0x7318A from the options constructor) builds in code into the options object at 0x310C38 (mov ecx, 0x310C38 at 0x11EC5 / 0x11F27 / 0x12088). On a match it calls the setter with the row.
 //
 // Setter. sub_000720A0 (USA sub_00072010 + 0x90; ecx = options, one stack argument = row, retn 4) flips bit `row` of
 // the cheat mask word at [options+0x76] (xor [eax+0x76], dx at 0x720B8) and plays the cheat-on sound 0x350B962D
@@ -47,7 +47,7 @@ bool GuestPtr(uint32_t va, uint32_t size) {
 
 // The options object the code table and the mask live in (USA 0x310B98 + 0xA0)
 constexpr uint32_t kOptions = 0x310C38u;
-// [options+4]: the OR of every table row; zero until sub_000720A0 has run
+// [options+4]: the OR of every table row; zero until sub_00072130 has run (mov [ecx+4], bx at 0x7227B)
 constexpr uint32_t kValidMask = kOptions + 4u;
 // [options+0x76]: the cheat mask itself (0x720B8: xor [eax+0x76], dx)
 constexpr uint32_t kMask = kOptions + 0x76u;
@@ -102,7 +102,7 @@ void EnterPending(X86Context& ctx) {
     const bool recogniser = recogniser_at >= ctx.ecx && GuestPtr(recogniser_at, 4) &&
                             kernel::R32(recogniser_at) != 0;                                     // 0x123B2
     if (!latch_clear || !pads || !recogniser) {
-        LOGI("cheats: codes %02X not entered, the game was not in a state to take them", pending);
+        LOGR("cheats: codes %02X not entered, the game was not in a state to take them", pending);
         return;
     }
     // flags are live only across tail calls, but the update reads them on entry: keep them as found
@@ -111,7 +111,7 @@ void EnterPending(X86Context& ctx) {
         if (!(pending & (1u << code))) continue;
         hle::Call(ctx, kEnterCode, kEnterAbi, {kOptions, uint32_t(code)});
         const uint32_t mask = GameMask();
-        LOGI("cheats: entered %s (code %d): %s, the game's cheat mask is now %02X", Name(code), code,
+        LOGR("cheats: entered %s (code %d): %s, the game's cheat mask is now %02X", Name(code), code,
              (mask >> code) & 1u ? "on" : "off", mask);
     }
     ctx.cf = cf;
@@ -129,7 +129,8 @@ namespace cheats {
 bool InGame() {
     if (!GuestPtr(kOptions, 0x78)) return false;
     if (!LatchClear()) return false;
-    // the table is built in code at startup: its combined mask is zero until sub_000720A0 has run
+    // the table is built in code at startup: its combined mask is zero until sub_00072130 has run (mov [ecx+4], bx at
+    // 0x7227B)
     return kernel::R16(kValidMask) != 0;
 }
 
@@ -149,7 +150,8 @@ X86_EXTERN_FUNC(__imp__sub_000122C0);
 // sub_000122C0: the application's per-frame update, whose first act on a fresh press is the game's own cheat-code
 // recogniser; pending codes are entered just ahead of it, under the conditions the update itself checks
 X86_FUNC(sub_000122C0) {
-    LOG_FIRST(1, "cheats: frame hook reached");
+    static std::atomic<bool> reached{false};
+    if (!reached.exchange(true, std::memory_order_relaxed)) LOGR("cheats: frame hook reached");
     if (g_toggle.load(std::memory_order_relaxed)) EnterPending(ctx);
     __imp__sub_000122C0(ctx, base);
 }

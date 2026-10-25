@@ -395,6 +395,9 @@ void DrawInput() {
     Row("Buttons");
     Note("Space A, Escape/Backspace B, X X, Y Y, Z / C triggers, 1 / 2 black / white, Enter Start, "
          "Tab Back, Shift / Ctrl (or middle button) stick clicks.");
+    Row("Controller");
+    Note("Black = RB / R1 / R, White = LB / L1 / L; L and R in the cheat codes are the triggers "
+         "(LT / RT, L2 / R2, ZL / ZR). Face buttons go by position, Xbox layout.");
 }
 
 // The game's own console cheats (common/cheats.h). Each one is entered the way its pad code is, so
