@@ -253,11 +253,35 @@ Huomiot (ei toimenpiteitä, paitsi 1):
   - Hylätty: StepPad SDK:hon (upstreamissa on jo `harness/pad_script.cpp`, SCRIPT-ympäristömuuttuja), PersistDisplay-korjaus
     (peli ei kutsu), SetFilter/SetI3DL2Source (peli ei kutsu, thunk luettiin väärin), XMV-vblank (kuollutta koodia).
 
-## Seuraavaksi (sessio 3)
-0. **Sulje PR #17** (ks. yllä) ja tee kohdat 2–3 (XInputGetCapabilities-rivi, LOGI→LOGR) samalla käännöksellä.
+## Sessio 4 (25.10.2026) — parannukset A–D
+- **Pelirepo `058b67c` (pushattu):** `XInputGetCapabilities = 0x2DAD67` configiin (image_symbols.h: HAS_ 1); pelin LOGI-rivit
+  (cheats, step, autostart, kbm) → LOGR; LOG_FIRST (= LOGI) korvattu omalla kerran-lipulla; cheats-kommentit: taulunrakentaja
+  sub_00072130, setteri sub_000720A0; F1 Input -osioon Controller-rivi (Black = RB/R1/R jne.); README: kloonausosoite,
+  kirjoitettava kansio, oletukset (aniso pois), ohjaintaulukko, License-osio; **LICENSE (MIT)**; CMake FetchContent →
+  `JoniNykanen/XboxXBERecomp` sims-5558; `sdk-muutokset-*.patch` poistettu. Kääntö 25 s.
+- **SDK sims-5558 (pushattu joni-remoteen):** `15761bc` upstream-PR #1:n 1.#INF → asfloat (Wine/Proton), `b65d71f`
+  signatures.toml xdk-5558-haarasta. `abt`-remote → `https://github.com/abilliontokens/XboxXBERecomp.git`.
+- **Julkiset:** PR #17 suljettu kommentilla (haara jäi). PR #15:een commit `f21dcfd`: layout.toml-otsake nimeää USA-osoitteet ja
+  Europe +0xA0. Lisenssipyyntö: https://github.com/abilliontokens/bustinout-recomp/issues/3 (odottaa vastausta; jos he eivät
+  anna lupaa, README:n License-osio ja siirretty koodi pitää miettiä uudelleen).
+- **Testit (kuvat `out\kuvakaappaukset\s4-*`):**
+  - Cheatit pelissä toimivat: F1 → Cheat gnome + Give money → loki `cheats: entered Cheat gnome (code 0): on, … mask 01` ja
+    `Give Money (code 1): on, … 03`. Tonttua ei näkynyt kuvakulmassa, Give Money -valintaa tontun valikosta ei kokeiltu.
+  - Nopeus: pelikello 25 peliminuuttia / 30,85 s fps_cap 60:llä ja 25 / 30,92 s rajattomalla (fps_cap 0, vsync pois) →
+    maailman nopeus ei riipu fps:stä. Yksi RIGHT-pulssi siirtää CAS-rivillä tasan yhden kohdan myös rajattomana. 2 s
+    nuolinäppäimen pito: tulos epäselvä (4 kohdan kiertävä rivi); kameran zoom/kierto >60 fps:llä yhä mittaamatta. F2:n fps-
+    lukemaa rajattomana ei saatu (peli ei saanut fokusta).
+  - Kieli: `assets\system.cnf` `localization_test = 3` **ei vaikuta** (valikot englanniksi) → kieli vaatii hookin
+    (sub_001001F3 / xboxkrnl case 7) tai pelin oman kielivalintaruudun avaamisen tyhjällä tallennuksella. Palautettu 255:ksi.
+  - s2b-askelsarja ei ole deterministinen: CAS-kursori jäi kasvoihin (tarvittiin RIGHT + A + A "Are you sure?" → Yes).
+- Ei tehty (tarkoituksella): [xtlid]-taulu (#44A), SIMSBO_UI (#6), hiiriherkkyys (#7), cvttsd2si (#9), FindGame-sääntö (#11),
+  kartoituksen tarkistamatta jääneet #70–#88.
+
+## Seuraavaksi (sessio 5)
+0. Seuraa issueta abilliontokens/bustinout-recomp#3 ja PR:iä #15/#16.
 1. **Seuraa upstream-PR:iä #15 ja #16** (`gh pr view 15 --repo TGP482/XboxXBERecomp`): vastaa katselmointiin, rebase
    #16, jos #8 menee ensin sisään. Kun PR:t on yhdistetty, README.md:n kääntöohje voi osoittaa suoraan upstreamiin.
-2. Cheatit pelin sisällä: aja talo auki (`-Askeleet` s2b-sarja) ja F1 → Give Money; lokiin pitäisi tulla
+2. Cheatit: varmennettu sessiossa 4 (loki). Valinnainen: Give Money tontun valikosta.
    `cheats: entered Give Money (code 1): on`.
 3. Valinnaiset grafiikkaportit, jos Jonilla on HDR-näyttö: b3b8b9d HDR-ulostulo SDK-haaraan. Muuten UV-rajaus +
    nuolikursori (pienet).
