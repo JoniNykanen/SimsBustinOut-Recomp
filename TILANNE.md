@@ -316,13 +316,18 @@ Kaikki käännetty (`kaanna-uudelleen.bat` 17–25 s) ja ajettu taloon asti (`ou
   upstream-PR:t uusista SDK-muutoksista.
 
 ## Seuraavaksi (sessio 6)
-0. Pushaa (Jonin luvalla): `git push` pelirepoon ja `git -C ..\XboxXBE-Recomp push joni sims-5558`.
-1. **Seuraa upstream-PR:iä #15 ja #16** ja lisenssi-issueta abilliontokens/bustinout-recomp#3 (25.10. klo 11: ei
+0. ~~Pushaa~~ tehty 25.10. (pelirepo 26d6fdf, SDK sims-5558 1e29cb9).
+1. **Seuraa upstream-PR:iä #15, #16 ja #18–#23** (25.10. avatut, ks. alla) ja lisenssi-issueta abilliontokens/bustinout-recomp#3 (25.10. klo 11: ei
    katselmointeja eikä vastausta). Rebase #16, jos #8 menee ensin sisään.
 2. Käsin: ohjain (lokiin tulee nyt `simsbo: controller connected on port N` ja `first rumble`), kielet fr/de/nl,
    taustamykistys (Alt+Tab), hiirikameran nopeus, `release.bat with-game`.
-3. Valinnaiset: upstream-PR:t sims-5558:n yleiskäyttöisistä SDK-muutoksista (exit-flush, kaatumisviesti, Warn-loki,
-   utility drive, aspect, kuvake, GPU-suojat), HDR (b3b8b9d) jos HDR-näyttö.
+3. ~~Upstream-PR:t sims-5558:n yleiskäyttöisistä SDK-muutoksista~~ avattu 25.10. (Jonin lupa), yksi per commit,
+   haarat upstreamin mainin päällä forkissa `joni`: **#18** `exit-flush-crash-notice`, **#19** `audio-set-volume`
+   (abilliontokens co-author), **#20** `aspect-setting`, **#21** `utility-drive-clean-format`, **#22**
+   `gpu-readback-guards-uv-clamp` (abilliontokens co-author), **#23** `title-image-window-icon`. Kaikki cherry-pickautuivat
+   puhtaasti; jokaisen haaran kaikki runtime-lähteet käännetty clang-cl:llä (-fsyntax-only, pelibuildin liput), ajettu
+   vain sims-5558:lla. PR #8 koskee samoja tiedostoja (main.cpp, log.cpp, d3d12.cpp, xapi.cpp): rebase, jos se menee
+   ensin. Työpuut ja PR-tekstit: tämän session scratchpadin `pr\`-kansio. Valinnainen: HDR (b3b8b9d) jos HDR-näyttö.
 4. Pelaa pidempään ja kirjaa viat: jos lokissa on `kernel export N (…) is not implemented` tai `indirect call … has no
    recompiled function`, nimi `runtime\kernel\ordinals.cpp`:stä / `korjaa-puuttuvat-funktiot.ps1`; toteutukset forkin
    `bustinout-port`-haarasta. Ohjain: SDL3 tunnistaa XInput-padit suoraan, testaamatta.
