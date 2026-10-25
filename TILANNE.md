@@ -277,14 +277,52 @@ Huomiot (ei toimenpiteitä, paitsi 1):
 - Ei tehty (tarkoituksella): [xtlid]-taulu (#44A), SIMSBO_UI (#6), hiiriherkkyys (#7), cvttsd2si (#9), FindGame-sääntö (#11),
   kartoituksen tarkistamatta jääneet #70–#88.
 
-## Seuraavaksi (sessio 5)
-0. Seuraa issueta abilliontokens/bustinout-recomp#3 ja PR:iä #15/#16.
-1. **Seuraa upstream-PR:iä #15 ja #16** (`gh pr view 15 --repo TGP482/XboxXBERecomp`): vastaa katselmointiin, rebase
-   #16, jos #8 menee ensin sisään. Kun PR:t on yhdistetty, README.md:n kääntöohje voi osoittaa suoraan upstreamiin.
-2. Cheatit: varmennettu sessiossa 4 (loki). Valinnainen: Give Money tontun valikosta.
-   `cheats: entered Give Money (code 1): on`.
-3. Valinnaiset grafiikkaportit, jos Jonilla on HDR-näyttö: b3b8b9d HDR-ulostulo SDK-haaraan. Muuten UV-rajaus +
-   nuolikursori (pienet).
+## Sessio 5 (25.10.2026) — "tee kaikki mitä pystyt": kartoituksen loput
+Kaikki käännetty (`kaanna-uudelleen.bat` 17–25 s) ja ajettu taloon asti (`out\kuvakaappaukset\s5*`), loki ilman virheitä.
+**Ei pushattu** (pelirepo `d13ffe0`, SDK sims-5558 `9fc4fd2..1e29cb9`, 6 committia): pushaa Jonin luvalla.
+- **Kielivalinta (#1/#50/#70/#84), varmennettu suomella** (`s5fi-23s` päävalikko "Jatka / Ryntää raitille / Vapaa
+  pelimuoto / Tekijät", `s5fi-100s` CAS "PÄÄ / HYVÄKSY / PERUUTA", logo "Ryntää raitille"). Pelin sisäiset kielitunnukset
+  (`[0x35D900]`): 0 en, 2 en-gb, 3 fr, 4 de, 5 it, 6 es, 7 nl, 8 da, 9 sv, 10 no, 11 fi (1 pseudo, 15/18/20 ja/zh/ko).
+  Konsolin XC_LANGUAGE-polku tavoittaa vain 0/3/4/5/6, eikä Xbox-buildissa ole kielivalintaruutua (PS2-jäänne).
+  Hook `sub_000E7080` (getteri, ensimmäinen kutsu 0x13512 → paluuosoite 0x13517 heti `mov [0x35D900], eax` 0x134F5:n
+  jälkeen) kirjoittaa valitun tunnuksen. `settings.toml` `language = 'fi'` tai F1 → Game → Language (uudelleenkäynnistys).
+  Flash-valikot saavat kaksikirjaimisen koodin vain fr/de/it/es/nl:lle (muut "en"), mutta suomi näkyi silti valikoissa.
+  **Miksi `localization_test` ei toiminut:** peli avaa `system.cnf`:n pelkällä nimellä (`fopen("system.cnf")`), runtime
+  ei kuvaa sitä mihinkään (`warning: NtCreateFile: no mapping for system.cnf`); ei korjattu, koska oikealla Xboxilla sama
+  ja tiedosto kytkisi kehittäjäliput päälle (cheatmenu=1 jne.). Siksi myös #79 (system.cnf-dokumentointi) on turha.
+- **NTSC-videot (#71):** `.loaded`-hook kirjoittaa `[0x2E3E18] = 0` → 29,97 fps -sarja (sims_intro.xmv, ea_games.xmv;
+  varmennettu tiedostojen LastAccessTimella). `ntsc_videos = false` palauttaa PAL:n.
+- **Pelipuoli muuten:** tallennusten varmuuskopio käynnistyksessä (`save-backups\<aika>`, 10 uusinta, vain muuttuneet;
+  #74), kursori piiloon kuvan päällä (WM_SETCURSOR, varmennettu hCursor=0; #75), mykistys taustalla (WM_ACTIVATEAPP →
+  audio::SetVolume; #76 ilman pysäytystä), `mouse_camera_speed` 25–400 % (#7, ei ikkunakokoskaalausta), F1: Aspect ratio,
+  Mouse camera speed, Game-osio (Language, Mute in background), `SIMSBO_UI=settings|perf` (#6), ohjaimen
+  kytkentä- ja ensimmäisen rumblen LOGR-rivit (#5), StepPad hyväksyy `RIGHTX3` (skripti isontaa tokenit).
+- **SDK (sims-5558):** `std::fflush(nullptr)` ennen `_Exit`:iä (#80); kaatuessa viesti pelaajalle + CrashDumps 10 uusinta
+  (#86/#65); release-lokiin Warn-rivit ja edellinen ajo `simsbustinout.previous.log` (#83/#41/#49: dsoundin "exports
+  running their original code" näkyy nyt aina); SSE4.2-tarkistus (#85); `audio::SetVolume` + `XBE_MUTE` (#19, testiajot
+  äänettömiä); `aspect = auto|4:3|16:9` (#72, 4:3 varmennettu `s5c-22s`); XMountUtilityDrive tyhjentää Z:n, kun XBE:n
+  FormatUtilityDrive-lippu pyytää (Simsin init flags 0x7; #81, varmennettu merkkitiedostolla); grafiikka-agentin portti
+  forkista: read-back-ylikirjoitus- ja low-physical-suojat, CreateCommittedResource-tarkistukset, spritejen UV-rajaus
+  (`XBE_NO_UVRECT`), CopyByRegion-lähdeskaala (#20/#21 + survey); ikkunan kuvake XBE:n $$XTIMAGE:sta (128×128 DXT3, ei
+  64×64 ARGB kuten kartoitus väitti; #77, ei pelikuvaa repossa).
+- **Työkalut:** `nimea-kaatumisosoitteet.py` (#87; testattu ajo 5:n PlayEx-pinolla), `release.bat` 7-Zip-tarkistus +
+  `release.bat with-game` (#17/#64; normaalitila testattu 57 Mt, with-game testaamatta), `kaanna-uudelleen.bat` vswhere (#59;
+  "'vswhere.exe' is not recognized" -rivi tulee VsDevCmd.bat:sta eikä haittaa). README ja `..\LUE MINUT.md` (#69) päivitetty.
+- **Kartoituksessa väärin/jo tehty:** #82 (väärä XBE) — `FindGame` kysyy jo Yes/No ennen käynnistystä; release-loki
+  kiertää jo (#65 osittain).
+- **Ei tehty:** #78 näppäimistökirjoitus CAS-nimeen (iso, Flash-dispatcheri), #73 konsolitallennusten allekirjoitus
+  (hyöty vain konsolitallennuksen tuojalle), pysäytys taustalla, #9 cvttsd2si (kuollut debug-polku), #11/#25 FindGame-
+  sääntö, #39 build-id, #63 versiointi/PDB, #62 suomenkielisten selvitysten siirto docs/:iin, HDR (vaatii HDR-näytön),
+  upstream-PR:t uusista SDK-muutoksista.
+
+## Seuraavaksi (sessio 6)
+0. Pushaa (Jonin luvalla): `git push` pelirepoon ja `git -C ..\XboxXBE-Recomp push joni sims-5558`.
+1. **Seuraa upstream-PR:iä #15 ja #16** ja lisenssi-issueta abilliontokens/bustinout-recomp#3 (25.10. klo 11: ei
+   katselmointeja eikä vastausta). Rebase #16, jos #8 menee ensin sisään.
+2. Käsin: ohjain (lokiin tulee nyt `simsbo: controller connected on port N` ja `first rumble`), kielet fr/de/nl,
+   taustamykistys (Alt+Tab), hiirikameran nopeus, `release.bat with-game`.
+3. Valinnaiset: upstream-PR:t sims-5558:n yleiskäyttöisistä SDK-muutoksista (exit-flush, kaatumisviesti, Warn-loki,
+   utility drive, aspect, kuvake, GPU-suojat), HDR (b3b8b9d) jos HDR-näyttö.
 4. Pelaa pidempään ja kirjaa viat: jos lokissa on `kernel export N (…) is not implemented` tai `indirect call … has no
    recompiled function`, nimi `runtime\kernel\ordinals.cpp`:stä / `korjaa-puuttuvat-funktiot.ps1`; toteutukset forkin
    `bustinout-port`-haarasta. Ohjain: SDL3 tunnistaa XInput-padit suoraan, testaamatta.
