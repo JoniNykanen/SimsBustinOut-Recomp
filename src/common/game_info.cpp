@@ -1,18 +1,32 @@
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
+#include <filesystem>
+#include <fstream>
 #include <mutex>
 #include <string>
+#include <vector>
+
+#include <toml++/toml.hpp>
 
 #include "app/app.h"
 #include "common/input_kbm.h"
+#include "common/language.h"
 #include "common/overlay.h"
 #include "core/input.h"
 #include "core/log.h"
+#include "kernel/kernel.h"
 
 namespace {
+
+namespace fs = std::filesystem;
+
+// settings.toml keys of the game's own (the input ones are in input_kbm.h)
+bool g_ntsc_videos = true;
 
 // Step mode (SIMSBO_STEP=<path>): each new token written to that file is a burst of timed pulses
 // generated here, on the game's own poll clock: NAME or NAMExN (START, A, B, X, Y, BACK, UP, DOWN,
@@ -52,7 +66,7 @@ bool StepPad(int port, input::Pad& pad) {
     // burst the input rests, however long the driver leaves the token in the file.
     std::string name = held;
     int count = 1;
-    if (const size_t x = held.rfind('x'); x != std::string::npos && x + 1 < held.size() &&
+    if (const size_t x = held.find_last_of("xX"); x != std::string::npos && x + 1 < held.size() &&
         held.find_first_not_of("0123456789", x + 1) == std::string::npos) {
         count = std::atoi(held.c_str() + x + 1);
         name = held.substr(0, x);
@@ -137,11 +151,99 @@ void AutostartPad(int port, input::Pad& pad) {
     }
 }
 
+// A release log shows whether a controller was seen at all: each port's plug and unplug as SDL
+// reported it, before the keyboard layer claims port 0 as connected.
+void LogPad(int port, const input::Pad& pad) {
+    static std::atomic<uint8_t> seen{0};
+    const uint8_t bit = uint8_t(1u << (port & 7));
+    const bool was = (seen.load(std::memory_order_relaxed) & bit) != 0;
+    if (pad.connected == was) return;
+    if (pad.connected) seen.fetch_or(bit, std::memory_order_relaxed);
+    else seen.fetch_and(uint8_t(~bit), std::memory_order_relaxed);
+    LOGR("simsbo: controller %s on port %d", pad.connected ? "connected" : "disconnected", port + 1);
+}
+
 // every polled pad: the scripted self-test first, then the keyboard and mouse (input_kbm.cpp).
 // Both only ever add to what a real controller reported.
 void PadHook(int port, input::Pad& pad) {
+    LogPad(port, pad);
     AutostartPad(port, pad);
     kbm::Apply(port, pad);
+}
+
+// the first rumble the game asks for, once, so a release log shows the motors were reached
+void RumbleHook(int port, uint16_t& left, uint16_t& right) {
+    static std::atomic<bool> once{false};
+    if ((left || right) && !once.exchange(true))
+        LOGR("simsbo: first rumble on port %d (%u / %u)", port + 1, unsigned(left), unsigned(right));
+}
+
+// The saves live in one place only (hdd\E\UDATA\45410043 beside the exe). Each start copies them to
+// save-backups\<date and time> first, unless nothing changed since the newest copy, and keeps the ten
+// newest copies: a bad build or a crash while saving can never take the only save with it.
+void BackUpSaves() {
+    const std::string suffix = app::Instance() > 1 ? std::to_string(app::Instance()) : "";
+    const fs::path src = app::ExeDir() / ("hdd" + suffix) / "E" / "UDATA" / "45410043";
+    const fs::path root = app::ExeDir() / ("save-backups" + suffix);
+    std::error_code ec;
+    if (!fs::is_directory(src, ec)) return;
+    // what the saves look like now: every file's path, size and time
+    std::string contents;
+    int files = 0;
+    for (auto it = fs::recursive_directory_iterator(src, ec); !ec && it != fs::recursive_directory_iterator();
+         it.increment(ec)) {
+        if (!it->is_regular_file(ec)) continue;
+        files++;
+        contents += fs::relative(it->path(), src, ec).generic_string() + " " + std::to_string(it->file_size(ec)) + " " +
+                    std::to_string(it->last_write_time(ec).time_since_epoch().count()) + "\n";
+    }
+    if (files == 0) return;
+    std::vector<fs::path> backups;
+    for (auto& e : fs::directory_iterator(root, ec))
+        if (e.is_directory(ec)) backups.push_back(e.path());
+    std::sort(backups.begin(), backups.end());  // named by date and time: oldest first
+    if (!backups.empty()) {
+        std::ifstream f(backups.back() / "contents.txt", std::ios::binary);
+        if (std::string((std::istreambuf_iterator<char>(f)), {}) == contents) return;
+    }
+    char name[32];
+    const std::time_t now = std::time(nullptr);
+    std::tm local{};
+    localtime_s(&local, &now);
+    std::strftime(name, sizeof name, "%Y-%m-%d_%H-%M-%S", &local);
+    const fs::path dst = root / name;
+    fs::create_directories(dst, ec);
+    fs::copy(src, dst, fs::copy_options::recursive | fs::copy_options::overwrite_existing, ec);
+    if (ec) {
+        LOGW("simsbo: save backup to %s failed: %s", dst.string().c_str(), ec.message().c_str());
+        return;
+    }
+    std::ofstream(dst / "contents.txt", std::ios::binary) << contents;
+    backups.push_back(dst);
+    for (size_t i = 0; i + 10 < backups.size(); i++) fs::remove_all(backups[i], ec);
+    LOGR("simsbo: saves backed up to %s (%d files)", dst.string().c_str(), files);
+}
+
+// The Europe disc carries every video twice, a 25 fps PAL cut and a 29.97 fps NTSC cut of the same
+// length (sims_intro_pal.xmv / sims_intro.xmv, ea_games_pal.xmv / ea_games.xmv, the reward films).
+// The game picks the PAL set by the constant 1 at [0x2E3E18] in .rdata, a choice made for a 50 Hz
+// TV. A PC display runs at 60 Hz or more, where 25 fps judders and the NTSC cut plays evenly, so the
+// constant becomes 0 before the game starts. Its other reader is the frame object's tick size
+// (0.02 s or 1/60 s), which the frame-step hook (hooks.cpp) replaces every frame anyway.
+// ntsc_videos = false in settings.toml keeps the PAL set.
+// settings.toml `language`, a key of language::kChoices; options hold numbers and flags only
+void LoadSettings(const void* table) {
+    const auto& t = *static_cast<const toml::table*>(table);
+    language::choice = language::Find(t["language"].value_or(std::string("auto")));
+}
+void SaveSettings(void* table) {
+    static_cast<toml::table*>(table)->insert_or_assign("language", language::kChoices[language::choice].key);
+}
+
+void Loaded() {
+    if (!g_ntsc_videos) return;
+    *static_cast<uint32_t*>(kernel::HostPtr(0x2E3E18)) = 0;
+    LOGR("simsbo: NTSC (29.97 fps) videos; settings.toml ntsc_videos = false for the PAL ones");
 }
 
 }  // namespace
@@ -156,16 +258,19 @@ const app::GameInfo app::kGame = {
     .splash = L"splash",                      // optional splash.png or splash.bmp beside the exe
     .missing = L"Put the game in the assets folder: its disc image (.iso), or default.xbe with its folders beside it.",
     .images = {{"default.xbe", "SimsBustinOut"}},  // each recompiled xbe and its exe, for title launches
-    .options = {},                            // game settings kept in the settings file
-    .load = nullptr,                          // reads more from the settings file's toml::table
-    .save = nullptr,                          // writes more into it
-    .init = nullptr,                          // after the settings load, before the window and boot
-    .loaded = nullptr,                        // image in memory, before its entry point runs
+    // game settings kept in the settings file
+    .options = {{"mouse_camera_speed", nullptr, &kbm::mouse_camera_speed},
+                {"mute_in_background", &kbm::mute_in_background, nullptr},
+                {"ntsc_videos", &g_ntsc_videos, nullptr}},
+    .load = &LoadSettings,                    // reads more from the settings file's toml::table: language
+    .save = &SaveSettings,                    // writes more into it
+    .init = &BackUpSaves,                     // after the settings load, before the window and boot
+    .loaded = &Loaded,                        // image in memory, before its entry point runs: NTSC videos
     .window = nullptr,                        // the game window is up
     .message = &kbm::Message,                 // window messages first; true takes one
     .ui = &overlay::Draw,                     // ImGui drawing each frame: F1 settings and cheats, F2 performance
     .pad = &PadHook,                          // keyboard and mouse as port 0, SIMSBO_STEP / SIMSBO_AUTOSTART
-    .rumble = nullptr,                        // changes a rumble before it is set
+    .rumble = &RumbleHook,                    // changes a rumble before it is set; logs the first one
     // This title draws a 640x448 picture inside its 640x480 back buffer (the mode table asks for a
     // 640x480 back buffer and stores the separate 640x448 picture size; Europe 0x1295BE / 0x129658).
     // Centred, the picture starts at row (480 - 448) / 2 = 16. USA docs/picture-rect.md.

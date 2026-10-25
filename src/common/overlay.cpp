@@ -4,12 +4,13 @@
 // window size or a pad exists.
 //
 // Ported from the USA project (abilliontokens/bustinout-recomp, src/common/overlay.cpp) to the
-// upstream SDK's settings: the aspect ratio, ultrawide (Hor+) and HDR controls are left out, because
-// the upstream D3D12 host has no such settings (its frame is 16:9 or 4:3 by the output's shape).
+// upstream SDK's settings: the ultrawide (Hor+) and HDR controls are left out, because the upstream
+// D3D12 host has no such settings. The aspect ratio is the SDK's own aspect setting.
 #include "common/overlay.h"
 
 #include "common/cheats.h"
 #include "common/input_kbm.h"
+#include "common/language.h"
 
 #include <algorithm>
 #include <atomic>
@@ -17,6 +18,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <iterator>
 
@@ -59,6 +61,10 @@ struct Draft {
     uint32_t fps_cap = 60;
     int render_percent = 100;
     uint32_t aniso = 0;
+    int aspect = 0;  // app::kAspects
+    int mouse_camera_speed = 100;
+    bool mute_in_background = true;
+    int language = 0;  // language::kChoices
 };
 Draft g_draft;
 app::Mode g_desktop{0, 0};   // read when the panel opens: the mode lookup is a syscall
@@ -75,6 +81,7 @@ constexpr uint32_t kFpsCaps[] = {0, app::kFpsCapRefresh, 30, 60, 72, 120, 144, 1
 constexpr uint32_t kAniso[] = {0, 2, 4, 8, 16};
 const char* const kAnisoNames[] = {"As the game asks", "2x", "4x", "8x", "16x"};
 const char* const kModeNames[] = {"Fullscreen", "Borderless", "Windowed"};
+const char* const kAspectNames[] = {"From the display's shape", "4:3", "16:9"};
 
 // the dark style this overlay wears, built once at scale 1 and rescaled from it
 const ImGuiStyle& BaseStyle() {
@@ -268,6 +275,10 @@ void SyncDraft() {
     g_draft.fps_cap = s.fps_cap;
     g_draft.render_percent = int(s.render_percent);
     g_draft.aniso = s.aniso;
+    g_draft.aspect = int(std::min(s.aspect, 2u));
+    g_draft.mouse_camera_speed = int(kbm::mouse_camera_speed);
+    g_draft.mute_in_background = kbm::mute_in_background;
+    g_draft.language = int(language::choice);
     g_desktop = app::Desktop();
     g_status[0] = '\0';
     g_status_left = 0.0f;
@@ -290,6 +301,10 @@ void Apply() {
     s.fps_cap = g_draft.fps_cap;
     s.render_percent = uint32_t(std::max(g_draft.render_percent, 1));
     s.aniso = g_draft.aniso;
+    s.aspect = uint32_t(g_draft.aspect);
+    kbm::mouse_camera_speed = uint32_t(std::clamp(g_draft.mouse_camera_speed, 25, 400));
+    kbm::mute_in_background = g_draft.mute_in_background;
+    language::choice = uint32_t(g_draft.language);
     if (relayout) app::ApplyDisplay();
 }
 
@@ -363,6 +378,11 @@ void DrawDisplay() {
         ImGui::EndCombo();
     }
     Note("Caps the presented frame rate; the game still steps by the time that really passed.");
+
+    Row("Aspect ratio");
+    ImGui::Combo("##aspect", &g_draft.aspect, kAspectNames, int(std::size(kAspectNames)));
+    Note("16:9 is the game's own widescreen mode, as on a widescreen TV; 4:3 shows it with bars at the "
+         "sides. The game reads the TV's shape when it starts: restart it after a change.");
 }
 
 void DrawQuality() {
@@ -395,6 +415,9 @@ void DrawInput() {
     Row("Buttons");
     Note("Space A, Escape/Backspace B, X X, Y Y, Z / C triggers, 1 / 2 black / white, Enter Start, "
          "Tab Back, Shift / Ctrl (or middle button) stick clicks.");
+    Row("Mouse camera speed");
+    ImGui::SliderInt("##mousecam", &g_draft.mouse_camera_speed, 25, 400, "%d %%");
+    Note("How far the right-button drag turns and zooms the camera for the same hand movement.");
     Row("Controller");
     Note("Black = RB / R1 / R, White = LB / L1 / L; L and R in the cheat codes are the triggers "
          "(LT / RT, L2 / R2, ZL / ZR). Face buttons go by position, Xbox layout.");
@@ -468,6 +491,20 @@ void DrawSettings() {
         DrawInput();
         ImGui::EndTable();
     }
+    ImGui::SeparatorText("Game");
+    if (BeginRows("##game_rows", label_width)) {
+        Row("Language");
+        if (ImGui::BeginCombo("##language", language::kChoices[g_draft.language].name)) {
+            for (int i = 0; i < int(std::size(language::kChoices)); i++)
+                if (ImGui::Selectable(language::kChoices[i].name, g_draft.language == i)) g_draft.language = i;
+            ImGui::EndCombo();
+        }
+        Note("The game's text, all on the disc. Read when the game starts: Save, then restart it.");
+        Row("Mute in background");
+        ImGui::Checkbox("##mutebg", &g_draft.mute_in_background);
+        Note("Silent while another window is active; the game keeps running.");
+        ImGui::EndTable();
+    }
     ImGui::SeparatorText("Cheats");
     const bool ingame = cheats::InGame();
     Note(ingame ? "The game's own pad codes, entered as if typed on the pad. Each click turns one on or off, "
@@ -521,6 +558,22 @@ void Draw(double fps) {
     if (io.DisplaySize.x < 1.0f || io.DisplaySize.y < 1.0f) return;
     ScaleStyle(io);
     Sample(io.DeltaTime);
+
+    // SIMSBO_UI=settings or =perf opens that panel at the first frame: a screenshot of it, or a
+    // player's report, needs no F-key to reach a window that may not have the focus
+    static bool env_checked = false;
+    if (!env_checked) {
+        env_checked = true;
+        if (const char* v = std::getenv("SIMSBO_UI")) {
+            if (std::strcmp(v, "settings") == 0) {
+                g_settings_open = true;
+                SyncDraft();
+                g_settings_focus = true;
+            } else if (std::strcmp(v, "perf") == 0) {
+                g_perf_open = true;
+            }
+        }
+    }
 
     // the host feeds every key to ImGui under the same lock, so these land while the game has
     // focus. F3 is the host's thread dump

@@ -13,7 +13,8 @@ This port was created using the [Xbox XBE Recomp](https://github.com/TGP482/Xbox
 - Run `SimsBustinOut.exe`. The first start compiles the game's code for your PC, this only happens once.
 - Settings can be adjusted in `settings.toml` beside the exe, or in the game with F1.
 - Extract the package to a folder you can write to (not `Program Files`): the compiled game code, `settings.toml` and the saves are written beside the exe.
-- Without a `settings.toml` the game starts borderless at the desktop resolution, 60 fps with vsync, render scale 100 % and anisotropic filtering off. `settings.toml` is written when you press Save in F1.
+- Without a `settings.toml` the game starts borderless at the desktop resolution, 60 fps with vsync, render scale 100 %, anisotropic filtering off, in English. `settings.toml` is written when you press Save in F1.
+- Your saves are copied to `save-backups` beside the exe each time the game starts and they have changed; the ten newest copies are kept.
 
 ## Features
 
@@ -21,17 +22,21 @@ This port was created using the [Xbox XBE Recomp](https://github.com/TGP482/Xbox
 - Borderless, fullscreen or windowed, at the desktop resolution or one of your choice.
 - Render scale from 50 % to 200 % of the output height; the game's 640x480 frame is rendered at that size.
 - Vertical sync and a frame rate cap: a fixed rate, the monitor's refresh rate, or unlimited.
-- The picture fills the window without the black bars the console left in the overscan rows, and is shown 16:9 on a widescreen output as the console did on a widescreen TV.
+- The picture fills the window without the black bars the console left in the overscan rows, and is shown 16:9 on a widescreen output as the console did on a widescreen TV. The aspect ratio can also be set to 4:3 (`aspect` in `settings.toml`, or F1).
 - Anisotropic texture filtering, forced where the game already filters across mip levels.
 
 ### Graphics
 - The game's own 2x2 supersampled back buffer is honoured, so menus, text and the HUD are the size the game drew them.
 - The gamma ramp the game blanks for its videos is kept, so the videos stay visible.
+- The videos play from the disc's 29.97 fps NTSC cut instead of the 25 fps PAL cut, which judders on a 60 Hz display (`ntsc_videos = false` for the PAL ones).
+- 2D sprites and text sample only inside their own part of a texture atlas, so no seam lines appear above 100 % render scale.
 
 ### General
 - **Correct speed at any frame rate** - the console engine stepped the world a whole PAL tick (20 ms) a frame, so it ran 1.2x too fast at 60 fps and faster still uncapped. The frame step is replaced by a 1 ms quantiser that advances by the time that really passed.
-- **F1 settings panel** - display, quality and input, with Apply and Save.
+- **Every language on the disc** - English, English (UK), French, German, Italian, Spanish, Dutch, Danish, Swedish, Norwegian and Finnish, chosen in F1 or with `language` in `settings.toml` (`auto`, `en-gb`, `fr`, `de`, `it`, `es`, `nl`, `da`, `sv`, `no`, `fi`). The console could only reach the first five through its system language. Takes effect at the next start.
+- **F1 settings panel** - display, quality, input, language and sound, with Apply and Save.
 - **F2 performance panel** - frame rate, frame time graph, render target and renderer counters.
+- **Background mute** - the game goes quiet while another window is active (`mute_in_background`).
 - **Cheats** - the game's own pad codes (cheat gnome, give money, fill motives, unlock all objects / locations / socials / skins, team picture), entered from the F1 panel exactly as the pad sequence would enter them. Nothing is saved.
 
 ### Controller
@@ -45,7 +50,7 @@ Supports Xbox, PlayStation and Switch controllers, with hot plugging and rumble.
 | A B X Y | by position, Xbox layout | | |
 
 ### Keyboard and mouse
-The keyboard and the mouse are a controller on port 0, and merge with a real controller on that port.
+The keyboard and the mouse are a controller on port 0, and merge with a real controller on that port. The mouse cursor is hidden over the picture; the camera's speed for the mouse drag is `mouse_camera_speed` (25-400 %, F1).
 
 | Keys | Console input |
 |---|---|
@@ -65,12 +70,19 @@ The keyboard and the mouse are a controller on port 0, and merge with a real con
 
 ### Miscellaneous
 - **Boot Splash** - Place a `splash.png` (or `.bmp`) beside the exe to display a splash screen at launch.
+- **Window icon** - the game's own dashboard image, read from your `default.xbe`.
+
+## Troubleshooting
+
+- If the game stops with an error, it says so and writes `logs\simsbustinout.log` and a dump in `CrashDumps`. The log of the run before is kept as `logs\simsbustinout.previous.log`, so starting the game again does not lose it. Send both files with a report.
+- Your saves are in `hdd\E\UDATA\45410043`; earlier copies are in `save-backups`.
 
 ## System Requirements
 
 ### Minimum
 - **OS**
   - Windows 10 64-bit
+- **CPU** with SSE4.2 (Intel from 2008, AMD from 2011)
 - **GPU** with support for Direct3D 12
 
 ## Building
@@ -95,7 +107,9 @@ Place your extracted game data files in the `assets` folder. `default.xbe` must 
 Install Visual Studio 2022 with **Desktop development with C++**, **C++ Clang tools for Windows** and **C++ CMake tools for Windows** (`build.bat` offers to add the last two).
 
 ### 4. Build the Project
-Run `build.bat`. The first build recompiles the game and takes a while. The exe is written to `out\build\release`. `kaanna-uudelleen.bat` rebuilds after a change (run it from a command prompt, not from PowerShell).
+Run `build.bat`. The first build recompiles the game and takes a while. The exe is written to `out\build\release`. `kaanna-uudelleen.bat` rebuilds after a change (run it from a command prompt, not from PowerShell). `release.bat` makes `SimsBustinOut.zip` without any game files (needs [7-Zip](https://www.7-zip.org)).
+
+`python nimea-kaatumisosoitteet.py [log]` names the guest addresses in a crash log: the XBE section, the recompiled function, the nearest `config\game.toml` symbol and whether the host replaces that function.
 
 ## License
 

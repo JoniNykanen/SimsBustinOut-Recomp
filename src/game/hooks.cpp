@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <cstring>
 
+#include "common/language.h"
 #include "core/log.h"
 #include "cpu/x86_ops.h"
 #include "xdk/hle.h"
@@ -17,6 +18,23 @@ bool HookOff(const char* name) {
     return v && v[0] && std::strcmp(v, "0") != 0;
 }
 }  // namespace
+
+// The text language, sub_000E7080: a getter with no arguments that maps the language id at [0x35D900] to a resource
+// hash. Boot init sub_00013430 stores the id it made from the console's language at 0x134F5 and calls this getter
+// first at 0x13512, before any language resource loads; every later reader of [0x35D900] comes after. So on that one
+// call (return address 0x13517) the chosen id replaces the console's, and the game goes on as if it had made it
+// itself: its text containers in quickdat.arc and datasets.arc carry each language at its id (common/language.h),
+// the Flash menus get their two-letter code from it (sub_000FB5xx: fr de it es nl, the rest en) and the EA logo
+// video its language (d:\ea_games_du.xmv for Dutch). The console path could only reach English, French, German,
+// Italian and Spanish; Dutch, Danish, Swedish, Norwegian, Finnish and UK English were on the disc, unreachable.
+X86_EXTERN_FUNC(__imp__sub_000E7080);
+X86_FUNC(sub_000E7080) {
+    if (const int id = language::Id(); id >= 0 && X86_MEM32(ctx.esp) == 0x13517u) {
+        X86_MEM32(0x35D900u) = uint32_t(id);
+        LOGR("simsbo: language %s (id %d)", language::kChoices[language::choice].key, id);
+    }
+    __imp__sub_000E7080(ctx, base);
+}
 
 // D3DDevice_InsertCallback(Flags, pCallback, Context), Europe 0x24D0D0 (USA 0x24D030; the D3D section is +0xA0).
 //
@@ -42,7 +60,8 @@ HLE_STDCALL(D3DDevice_InsertCallback, 3) {
 // the tick size at [0x35D2B8] (USA 0x35D218), truncates to a tick count stored at [0x30AB70] (USA 0x30AAD0), clamps
 // it to 1..15 and adds it to the running total at [0x35D2D0] (USA 0x35D230). The tick size is set once by the frame
 // object's constructor sub_00123B10: 0.02 s when [0x2E3E18] is 1, else 1/60 s; in this Europe image [0x2E3E18] is
-// the constant 1 in .rdata, so the shipped game always runs the PAL 0.02 s quantum. The caller then makes the one
+// the constant 1 in .rdata, so the shipped game always runs the PAL 0.02 s quantum (game_info.cpp turns it to 0 for
+// the NTSC videos, which makes that 1/60 s; this hook writes its own tick size either way). The caller then makes the one
 // delta the rest of the engine multiplies by out of ticks * tick size. A frame shorter than one tick still advances
 // the world by a whole tick: at 60 fps this image runs 1.2x too fast, and uncapped the speed grows without bound.
 //

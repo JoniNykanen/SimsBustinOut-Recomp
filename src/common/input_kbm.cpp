@@ -38,7 +38,8 @@
 // the pad on whichever guest thread polls it.
 //
 // While the F1 settings panel is up the overlay owns the keyboard and the mouse and nothing here
-// reaches the game. This is the Windows path of the USA project's file
+// reaches the game. The cursor is hidden over the picture except while that panel is up, and the
+// game's sound is turned down while another window is active (mute_in_background). This is the Windows path of the USA project's file
 // (abilliontokens/bustinout-recomp, src/common/input_kbm.cpp) without its SDL/Linux branch.
 #include "common/input_kbm.h"
 
@@ -53,10 +54,14 @@
 #define NOMINMAX
 #include <windows.h>
 
+#include "audio/audio.h"
 #include "common/overlay.h"
 #include "core/log.h"
 
 namespace kbm {
+
+uint32_t mouse_camera_speed = 100;
+bool mute_in_background = true;
 
 namespace {
 
@@ -64,7 +69,7 @@ namespace {
 std::atomic<int64_t> g_zoom_until{0};  // steady-clock milliseconds
 std::atomic<int> g_zoom_dir{0};        // +1 in, -1 out
 
-constexpr float kDragRadius = 140.0f;  // pixels from the press point for a fully deflected stick
+constexpr float kDragRadius = 140.0f;  // pixels from the press point for a full stick at speed 100
 constexpr int64_t kZoomMsPerNotch = 90;
 constexpr int64_t kZoomMsMax = 450;  // a spun wheel does not queue up seconds of zoom
 
@@ -201,8 +206,19 @@ void Collect(State& state) {
 
 bool Message(void* hwnd, uint32_t msg, uintptr_t wp, intptr_t lp, intptr_t* result) {
     (void)hwnd;
-    (void)result;
     switch (msg) {
+        // The class has no cursor, so Windows kept whatever shape came in over the window. Over the
+        // picture it is hidden: the game is played on the pad and the keys, the mouse only drags the
+        // camera. ImGui takes this message itself while the F1 panel is up (overlay.cpp lets it
+        // change the cursor then); the arrow here covers the frame it is opening on.
+        case WM_SETCURSOR:
+            if (LOWORD(lp) != HTCLIENT) break;
+            SetCursor(overlay::SettingsOpen() ? LoadCursorW(nullptr, IDC_ARROW) : nullptr);
+            *result = TRUE;
+            return true;
+        case WM_ACTIVATEAPP:
+            audio::SetVolume(wp || !mute_in_background ? 1.0f : 0.0f);
+            break;
         case WM_KEYDOWN:
             if (wp < 256) g_down[wp].store(true, std::memory_order_relaxed);
             break;
@@ -251,7 +267,7 @@ bool Message(void* hwnd, uint32_t msg, uintptr_t wp, intptr_t lp, intptr_t* resu
         default:
             break;
     }
-    return false;  // never takes a message
+    return false;  // the rest go on to the host
 }
 
 void Apply(int port, input::Pad& pad) {
@@ -275,9 +291,10 @@ void Apply(int port, input::Pad& pad) {
     float rx = Axis(state.Down(Key::CamLeft), state.Down(Key::CamRight));
     float ry = Axis(state.Down(Key::CamOut), state.Down(Key::CamIn));
     if (state.rmb) {
-        rx += (state.mouse_x - state.anchor_x) / kDragRadius;
+        const float radius = kDragRadius * 100.0f / float(std::clamp(mouse_camera_speed, 25u, 400u));
+        rx += (state.mouse_x - state.anchor_x) / radius;
         // screen y grows downward, the stick's upward
-        ry -= (state.mouse_y - state.anchor_y) / kDragRadius;
+        ry -= (state.mouse_y - state.anchor_y) / radius;
     }
     if (NowMs() < g_zoom_until.load(std::memory_order_relaxed))
         ry += float(g_zoom_dir.load(std::memory_order_relaxed));
